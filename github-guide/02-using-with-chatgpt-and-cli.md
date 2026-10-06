@@ -28,7 +28,11 @@ git config --global core.editor nano              # editor git opens for message
 ```
 Then install Codex CLI (`brew install codex`, or `npm install -g @openai/codex`), run `codex` once and sign in with your ChatGPT account. For Codex cloud: in ChatGPT open Codex → connect GitHub → choose which repos it may access. For the chat connector: Settings → Apps/Connectors → GitHub.
 
-Finally install the helpers: `bash helpers/install.sh` (details in [helpers/README.md](helpers/README.md)).
+Finally get this guide onto your Mac and install the helpers (details in [helpers/README.md](helpers/README.md)):
+```bash
+gh repo clone contravariant/presentations ~/presentations
+bash ~/presentations/github-guide/helpers/install.sh
+```
 
 Check: `gh auth status` should say "Logged in".
 
@@ -51,7 +55,7 @@ Each recipe: *say* → *runs*. `<…>` = fill in. Older repos call the default b
 Say: "Make this folder a private GitHub repo called sizing-paper."
 ```bash
 git init
-# writes .gitignore (R/Python/LaTeX template)
+cp ~/.config/git/ignore .gitignore        # R/Python/LaTeX template (installed in §2)
 git add -A && git commit -m "Initial commit"
 gh repo create sizing-paper --private --source=. --push
 ```
@@ -104,7 +108,7 @@ gh pr merge --merge --delete-branch   # merge on GitHub; delete the branch on Gi
                                       # locally; switch you to main
 git pull                              # bring merged main locally
 ```
-If you already clicked **Merge** on GitHub: `git switch main && git pull && git branch -D new-figures`.
+If you already clicked **Merge** on GitHub, `finish` still works (it skips the merge). Terminal shortcut for all of 4.7: `git finish`.
 
 ### 4.8 Contribute to someone else's repo (`contribute`, i.e. fork)
 Say: "I want to propose a fix to otheruser/somerepo."
@@ -115,7 +119,7 @@ cd somerepo && git switch -c fix-typo
 git push
 gh pr create --fill                       # PR goes to the original repo
 ```
-Before new work on a fork, bring it up to date with the original: "update my fork" → `gh repo sync <you>/somerepo && git pull`.
+Before new work on a fork, bring it up to date with the original: "update my fork" → `gh repo sync <you>/somerepo && git switch main && git pull`.
 
 ### 4.9 Resolve a merge conflict
 Say: "I have a merge conflict. Show me both versions of each conflict and recommend which to keep."
@@ -124,6 +128,7 @@ The agent shows the `<<<<<<< ======= >>>>>>>` blocks (Part 1 §5); you decide; t
 git add <file> && git commit --no-edit   # conclude the merge
 git push                                 # upload it
 ```
+Terminal shortcut: once the markers are gone, `git save` does all of this (it refuses while markers remain).
 To give up and return to before the merge: `git merge --abort`.
 
 ### 4.10 Undo (`undo`)
@@ -136,7 +141,7 @@ Say what you want undone, in plain words; the agent picks the tool (Part 1 §7):
 | "Undo the last commit, I haven't pushed" | `git reset --soft HEAD~1` (`HEAD~1` = the commit before the current one; commit gone, changes kept staged) |
 | "Undo commit a1b2c3d, already pushed" | `git revert --no-edit a1b2c3d && git push` |
 | "Stop tracking data.csv but keep the file" | `git rm --cached data.csv`, add it to `.gitignore`, save |
-| "Make the repo look like it did on 1 Sept, keeping history" | `h=$(git rev-list -1 --before="2026-09-02" HEAD)`; `git restore --source=$h --staged --worktree .`; `git commit -m "Restore state of 1 Sept"` |
+| "Make the repo look like it did on 1 Sept, keeping history" | `h=$(git rev-list -1 --before="2026-09-02 00:00" HEAD)`; `git restore --source=$h --staged --worktree .`; `git commit -m "Restore state of 1 Sept"` |
 | "I lost a commit" | `git reflog`, then `git branch rescue <hash>` |
 
 ### 4.11 Look at history

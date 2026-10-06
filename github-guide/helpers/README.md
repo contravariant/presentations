@@ -9,7 +9,7 @@
 | `gitignore-template` | Patterns for files Git should never track (R/Python/LaTeX/macOS clutter). | `install.sh` sets it as your global ignore list (applies to every repo on your Mac) unless you already have one. |
 
 ```bash
-bash install.sh      # run from anywhere; safe to re-run; warns about alias name clashes
+bash path/to/helpers/install.sh   # safe to re-run; warns about alias name clashes
 ```
 In Codex, type `/skills` to check that `git-workflow` is listed. If not, also copy the folder to `~/.codex/skills/`.
 
@@ -19,7 +19,7 @@ In Codex, type `/skills` to check that `git-workflow` is listed. If not, also co
 |---|---|---|
 | `git st` | `git status -sb` | compact status |
 | `git lg` | `git log --oneline --graph --decorate -20` | last 20 commits as a graph |
-| `git save "msg"` | `add -A`, `commit`, `pull`, `push` | message required if there is something to commit; plain `git save` just pulls + pushes |
+| `git save "msg"` | `add -A`, `commit`, `pull`, `push` | message required if there is something to commit; plain `git save` just pulls + pushes; after a conflict, concludes the merge (refuses while markers remain) |
 | `git sync` | `git pull --no-rebase --no-edit` | |
 | `git start <topic>` | `switch main`, `pull`, `switch -c <topic>` | new branch from fresh main (or `master`) |
 | `git propose` | `push -u origin HEAD`, `gh pr create --fill` | opens PR, prints URL; refuses on main |

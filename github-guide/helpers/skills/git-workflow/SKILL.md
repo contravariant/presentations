@@ -29,9 +29,9 @@ git commit -m "<message>"        # skip if nothing staged; write a message if no
 git pull --no-rebase --no-edit   # merge GitHub's new commits; skip if the branch isn't on GitHub yet
 git push                         # first push of a branch: git push -u origin HEAD
 ```
-Commit before pulling: a pull with uncommitted edits can be refused. If the pull reports `CONFLICT`, go to **conflict**. If on `<default>` in a repo with collaborators or branch protection, suggest `start` + `propose` instead. On a branch with an open PR, each push updates the PR.
+If a merge is in progress (`git rev-parse -q --verify MERGE_HEAD` succeeds), first check no `<<<<<<<`/`>>>>>>>` markers remain, then `git commit --no-edit`. Commit before pulling: a pull with uncommitted edits can be refused. If the pull reports `CONFLICT`, go to **conflict**. If on `<default>` in a repo with collaborators or branch protection, suggest `start` + `propose` instead. On a branch with an open PR, each push updates the PR.
 
-**sync** — `git pull --no-rebase --no-edit`. If uncommitted edits block it, offer: save first, or `git stash` / pull / `git stash pop`. In a fork, first `gh repo sync <user>/<repo>` (brings the original's new commits into the fork).
+**sync** — `git pull --no-rebase --no-edit`. If uncommitted edits block it, offer: save first, or `git stash` / pull / `git stash pop`. In a fork, first `gh repo sync <user>/<repo>` (brings the original's new commits into the fork), then `git switch <default>` before pulling.
 
 **start <topic>** — `git switch <default> && git pull --no-rebase --no-edit && git switch -c <kebab-case-topic>`.
 
@@ -56,7 +56,7 @@ git push origin --delete <branch>  # ignore "remote ref does not exist"
 |---|---|
 | discard edits to a file | `git restore <file>` (confirm, rule 5) |
 | unstage | `git restore --staged <file>` |
-| undo last commit, not pushed | `git reset --soft HEAD~1` |
+| undo last commit, not pushed (`git branch -r --contains HEAD` is empty) | `git reset --soft HEAD~1` |
 | undo a pushed commit | `git revert --no-edit <hash>` then `git push` |
 | return repo to state at date/commit, keep history | `git restore --source=<hash> --staged --worktree .` then commit "Restore state of <ref>" |
 | stop tracking a file, keep it on disk | `git rm --cached <file>`, add to `.gitignore`, commit |

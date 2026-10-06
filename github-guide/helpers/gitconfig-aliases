@@ -7,13 +7,18 @@
 	st = status -sb
 	lg = log --oneline --graph --decorate -20
 	sync = pull --no-rebase --no-edit
-	# Name of the default branch (helper used below).
-	default = "!d=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null); d=${d#origin/}; echo ${d:-main}"
+	# Name of the default branch (helper used below): origin's, else main, else master.
+	default = "!d=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null); d=${d#origin/}; \
+		[ -n \"$d\" ] || git show-ref -q --verify refs/heads/main || d=master; echo ${d:-main}"
 	# Stage everything, commit (message required if there is something to commit),
 	# merge in GitHub's new commits, push. With nothing to commit, just pulls and pushes.
+	# Also concludes a merge after a conflict, but refuses while conflict markers remain.
 	save = "!f() { git symbolic-ref -q HEAD >/dev/null || { echo 'not on a branch: run git switch main'; return 1; }; \
+		if git diff --name-only -z --diff-filter=U | xargs -0 grep -lE '^(<<<<<<<|>>>>>>>)( |$)' 2>/dev/null; \
+		then echo 'conflict markers left in the files above: edit them out first'; return 1; fi; \
 		git add -A; \
-		if ! git diff --cached --quiet; then \
+		if git rev-parse -q --verify MERGE_HEAD >/dev/null; then git commit -q --no-edit || return 1; \
+		elif ! git diff --cached --quiet; then \
 			[ -n \"$1\" ] || { echo 'usage: git save \"message\"'; return 1; }; \
 			git commit -m \"$1\" || return 1; fi; \
 		if git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; \
@@ -30,10 +35,10 @@
 	finish = "!f() { d=$(git default); b=$(git branch --show-current); \
 		s=$(gh pr view \"$b\" --json state -q .state) || return 1; \
 		if [ \"$s\" = OPEN ]; then gh pr merge \"$b\" --merge || return 1; s=$(gh pr view \"$b\" --json state -q .state); fi; \
-		[ \"$s\" = MERGED ] || { echo \"PR state is $s, not merged (checks still running?). Nothing deleted.\"; return 1; }; \
+		[ \"$s\" = MERGED ] || { echo \"PR is $s, not merged (if OPEN: checks may still be running). Nothing deleted.\"; return 1; }; \
 		git switch \"$d\" && git pull --no-rebase --no-edit || return 1; \
 		git branch -D \"$b\" 2>/dev/null; git push -q origin --delete \"$b\" 2>/dev/null; echo \"merged; on $d; $b deleted\"; }; f"
 	# Undo the last commit, keeping its changes staged. Refuses if already pushed.
-	uncommit = "!f() { if git merge-base --is-ancestor HEAD @{u} 2>/dev/null; \
+	uncommit = "!f() { if [ -n \"$(git branch -r --contains HEAD)\" ]; \
 		then echo 'last commit is already on GitHub: use git revert HEAD instead'; return 1; fi; \
 		git reset --soft HEAD~1; }; f"
