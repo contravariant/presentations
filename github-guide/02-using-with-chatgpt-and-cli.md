@@ -17,6 +17,8 @@ The helper files in [`helpers/`](helpers/) make all four behave consistently (se
 
 ```bash
 xcode-select --install          # installs git (skip if `git --version` works)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                                # Homebrew, the Mac package installer (skip if `brew --version` works)
 brew install gh                 # GitHub CLI: talks to github.com (PRs, forks, repos)
 gh auth login                   # GitHub.com → HTTPS → answer Yes to "Authenticate Git" → browser
 git config --global user.name  "Your Name"
@@ -26,7 +28,7 @@ git config --global pull.rebase false             # `git pull` merges (see Part 
 git config --global push.autoSetupRemote true     # first push of a new branch creates it on GitHub
 git config --global core.editor nano              # editor git opens for messages (default is vim)
 ```
-Then install Codex CLI (`brew install codex`, or `npm install -g @openai/codex`), run `codex` once and sign in with your ChatGPT account. For Codex cloud: in ChatGPT open Codex → connect GitHub → choose which repos it may access. For the chat connector: Settings → Apps/Connectors → GitHub.
+Then install Codex CLI (`brew install codex`), run `codex` once and sign in with your ChatGPT account. For Codex cloud: in ChatGPT open Codex → connect GitHub → choose which repos it may access. For the chat connector: Settings → Apps/Connectors → GitHub.
 
 Finally get this guide onto your Mac and install the helpers (details in [helpers/README.md](helpers/README.md)):
 ```bash
