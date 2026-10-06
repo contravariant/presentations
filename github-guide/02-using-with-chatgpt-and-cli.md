@@ -15,6 +15,11 @@ The helper files in [`helpers/`](helpers/) make all four behave consistently (se
 
 ## 2. One-time setup (Mac)
 
+First, let the Mac shell (zsh) accept the `# comments` used in all code blocks below. Without this, pasting a line with a comment fails, and an apostrophe in a comment leaves you at a `quote>` prompt (Ctrl-C to escape):
+```bash
+echo 'setopt interactive_comments' >> ~/.zshrc && source ~/.zshrc
+```
+Then:
 ```bash
 xcode-select --install          # installs git (skip if `git --version` works)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
