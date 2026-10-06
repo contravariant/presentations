@@ -18,11 +18,12 @@ The helper files in [`helpers/`](helpers/) make all four behave consistently (se
 ```bash
 xcode-select --install          # installs git (skip if `git --version` works)
 brew install gh                 # GitHub CLI: talks to github.com (PRs, forks, repos)
-gh auth login                   # choose GitHub.com → HTTPS → login with browser
+gh auth login                   # GitHub.com → HTTPS → answer Yes to "Authenticate Git" → browser
 git config --global user.name  "Your Name"
 git config --global user.email "you@example.com"   # same email as your GitHub account
 git config --global init.defaultBranch main
 git config --global pull.rebase false             # `git pull` merges (see Part 1 §5)
+git config --global push.autoSetupRemote true     # first push of a new branch creates it on GitHub
 git config --global core.editor nano              # editor git opens for messages (default is vim)
 ```
 Then install Codex CLI (`brew install codex`, or `npm install -g @openai/codex`), run `codex` once and sign in with your ChatGPT account. For Codex cloud: in ChatGPT open Codex → connect GitHub → choose which repos it may access. For the chat connector: Settings → Apps/Connectors → GitHub.
@@ -33,18 +34,18 @@ Check: `gh auth status` should say "Logged in".
 
 ## 3. How to talk to the agent
 
-Start Codex CLI **inside the project folder** (`cd ~/research/sizing-paper && codex`). Then speak in intents; the `git-workflow` skill maps them to the recipes below. With the skill installed you can say just the verb — `save`, `sync`, `propose` — or invoke it explicitly as `$git-workflow save`.
+Start Codex CLI **inside the project folder** (`cd ~/research/sizing-paper && codex`). Then speak in intents. The `git-workflow` *skill* (a Markdown file of instructions the agent loads when your request matches it; see §6) maps them to the recipes below. With the skill installed you can say just the verb — `save`, `sync`, `propose` — or invoke it explicitly as `$git-workflow save`.
 
 Three habits:
 1. **Ask before acting** when unsure: "What would you run to do X? Don't run it yet."
 2. **Read the diff** before a commit: "Show me the diff first."
-3. **Never approve** `push --force`, `reset --hard`, or `rebase` on `main` unless you understand why (the skill refuses them by default).
+3. **Never approve** `push --force`, `reset --hard`, or `rebase` on `main` unless you understand why (the skill asks for confirmation before any of them).
 
 In ChatGPT **chat**, paste the output of `git status` and of the error; it cannot see your machine.
 
 ## 4. Recipes
 
-Each recipe: *say* → *runs*. `<…>` = fill in.
+Each recipe: *say* → *runs*. `<…>` = fill in. Older repos call the default branch `master` instead of `main`; the skill and aliases detect this.
 
 ### 4.1 Put an existing folder on GitHub (`new-repo`)
 Say: "Make this folder a private GitHub repo called sizing-paper."
@@ -64,7 +65,7 @@ cd ~/research && gh repo clone contravariant/presentations
 ### 4.3 Where am I? (`status`)
 Say: "status"
 ```bash
-git status            # branch, staged / unstaged / untracked files, ahead/behind GitHub
+git status            # branch; staged, unstaged and untracked files; ahead/behind GitHub
 git log --oneline -5  # last 5 commits
 ```
 
@@ -77,7 +78,7 @@ git commit -m "Add robustness table"
 git pull                                  # merge in any new GitHub commits
 git push
 ```
-To commit only part of your changes: "Commit only model.R; leave notes.md uncommitted."
+To commit only part of your changes: "Commit only model.R; leave notes.md uncommitted." Terminal shortcut: `git save "Add robustness table"`.
 
 ### 4.5 Get the latest from GitHub (`sync`)
 Say: "sync"
@@ -91,18 +92,19 @@ Say: "start a branch for the new figures", work, then "propose".
 git switch main && git pull
 git switch -c new-figures           # create + switch to branch
 # … edit, then save as in 4.4 (commits go on new-figures) …
-git push -u origin new-figures      # -u: remember origin as this branch's remote
+git push                            # creates new-figures on GitHub (thanks to autoSetupRemote)
 gh pr create --fill                 # open PR; --fill uses commit messages as title/body
 ```
-You get a PR link. Review the diff on GitHub (Files changed tab).
+You get a PR link. Review the diff on GitHub (Files changed tab). To revise the PR (e.g. after review comments), keep saving on the same branch: each push updates the PR.
 
 ### 4.7 Merge the PR and clean up (`finish`)
 Say: "finish" (or click **Merge** on GitHub, then say "finish").
 ```bash
-gh pr merge --merge --delete-branch   # merge on GitHub, delete remote branch
-git switch main && git pull           # bring merged main locally
-git branch -d new-figures             # delete local branch
+gh pr merge --merge --delete-branch   # merge on GitHub; delete the branch on GitHub and
+                                      # locally; switch you to main
+git pull                              # bring merged main locally
 ```
+If you already clicked **Merge** on GitHub: `git switch main && git pull && git branch -D new-figures`.
 
 ### 4.8 Contribute to someone else's repo (`contribute`, i.e. fork)
 Say: "I want to propose a fix to otheruser/somerepo."
@@ -110,15 +112,17 @@ Say: "I want to propose a fix to otheruser/somerepo."
 gh repo fork otheruser/somerepo --clone   # fork on GitHub + clone your fork
 cd somerepo && git switch -c fix-typo
 # … edit, commit …
-git push -u origin fix-typo
+git push
 gh pr create --fill                       # PR goes to the original repo
 ```
+Before new work on a fork, bring it up to date with the original: "update my fork" → `gh repo sync <you>/somerepo && git pull`.
 
 ### 4.9 Resolve a merge conflict
 Say: "I have a merge conflict. Show me both versions of each conflict and recommend which to keep."
 The agent shows the `<<<<<<< ======= >>>>>>>` blocks (Part 1 §5); you decide; then:
 ```bash
-git add <file> && git commit --no-edit   # concludes the merge
+git add <file> && git commit --no-edit   # conclude the merge
+git push                                 # upload it
 ```
 To give up and return to before the merge: `git merge --abort`.
 
@@ -129,8 +133,9 @@ Say what you want undone, in plain words; the agent picks the tool (Part 1 §7):
 |---|---|
 | "Throw away my edits to model.R" | `git restore model.R` |
 | "Unstage notes.md" | `git restore --staged notes.md` |
-| "Undo the last commit, I haven't pushed" | `git reset --soft HEAD~1` (commit gone, changes kept staged) |
-| "Undo commit a1b2c3d, already pushed" | `git revert a1b2c3d && git push` |
+| "Undo the last commit, I haven't pushed" | `git reset --soft HEAD~1` (`HEAD~1` = the commit before the current one; commit gone, changes kept staged) |
+| "Undo commit a1b2c3d, already pushed" | `git revert --no-edit a1b2c3d && git push` |
+| "Stop tracking data.csv but keep the file" | `git rm --cached data.csv`, add it to `.gitignore`, save |
 | "Make the repo look like it did on 1 Sept, keeping history" | `h=$(git rev-list -1 --before="2026-09-02" HEAD)`; `git restore --source=$h --staged --worktree .`; `git commit -m "Restore state of 1 Sept"` |
 | "I lost a commit" | `git reflog`, then `git branch rescue <hash>` |
 
@@ -138,9 +143,8 @@ Say what you want undone, in plain words; the agent picks the tool (Part 1 §7):
 | Say | Runs |
 |---|---|
 | "What changed since last week?" | `git log --since="1 week ago" --oneline --stat` |
-| "Who changed this line / when?" | `git blame -L 40,60 model.R` |
 | "Show the file as of commit a1b2c3d" | `git show a1b2c3d:model.R` |
-| "Diff between my branch and main" | `git diff main...HEAD` |
+| "What has my branch changed since it left main?" | `git diff main...HEAD` |
 
 ### 4.12 Mark a version (tag)
 Say: "Tag this as submitted-2026-10 and push the tag."
@@ -152,26 +156,28 @@ git tag -a submitted-2026-10 -m "Submitted to journal" && git push origin submit
 
 In ChatGPT → Codex: pick the repo and branch, type the task — e.g. *"In sizing_best_practices.tex, add a subsection on volatility targeting after Section 3. Open a PR."* Codex works in a sandbox and returns a diff plus a **Create PR** button. Then on GitHub: review the PR → **Merge**. Locally, run `sync` before your next edit, or you will be behind (Part 1 §4).
 
-Follow-ups in the same Codex task ("also fix the bibliography") update the same PR.
+Follow-ups in the same Codex task ("also fix the bibliography") produce a new diff that can be pushed to the same PR.
 
 ## 6. What the helpers add
 
 | File | Used by | Effect |
 |---|---|---|
-| `helpers/skills/git-workflow/SKILL.md` | Codex CLI (also Claude Code) | Gives the agent the verbs `status save sync start propose finish undo new-repo contribute`, each with fixed steps and safety rules. |
+| `helpers/skills/git-workflow/SKILL.md` | Codex CLI (also Claude Code) | Gives the agent the verbs `status save sync start propose finish undo new-repo contribute conflict`, each with fixed steps and safety rules. |
 | `helpers/AGENTS.md` | Codex CLI and Codex cloud, when placed in a repo's root | Per-repo rules: commit-message style, what never to commit, branch/PR policy. |
 | `helpers/chatgpt-instructions.md` | ChatGPT chat (Project instructions) | Makes chat answers consistent: exact commands, one-line explanation each, and a ⚠ flag on anything destructive. |
-| `helpers/gitconfig-aliases` | Plain terminal | Short commands: `git save "msg"`, `git sync`, `git start`, `git propose`, `git finish`, `git uncommit`, `git lg`. |
-| `helpers/gitignore-template` | `new-repo` | Ignores R/Python/LaTeX/macOS clutter. |
+| `helpers/gitconfig-aliases` | Plain terminal | Short commands with safety checks: `git st`, `git lg`, `git save "msg"`, `git sync`, `git start <topic>`, `git propose`, `git finish`, `git uncommit`. Table in [helpers/README.md](helpers/README.md). |
+| `helpers/gitignore-template` | all your repos (installed as global ignore list) | Ignores R/Python/LaTeX/macOS clutter. |
 
 ## 7. Troubleshooting
 
 | Message | Meaning | Fix (say / run) |
 |---|---|---|
-| `rejected … (fetch first)` / `non-fast-forward` | GitHub has commits you lack. | "sync then push" → `git pull && git push` |
-| `Your branch is ahead of 'origin/main' by N commits` | Committed, not pushed. | `git push` |
+| `rejected … (fetch first)` | GitHub has commits you lack. | "sync then push" → `git pull && git push` |
+| `Your branch is ahead of 'origin/main' by N commits` | N commits made, not pushed. | `git push` |
+| `has no upstream branch` | Branch not yet on GitHub. | `git push -u origin HEAD` (or set `push.autoSetupRemote`, §2) |
 | `CONFLICT (content)` | See 4.9. | |
 | `Please commit your changes or stash them` | Uncommitted edits block a pull/switch. | Commit them (4.4), or `git stash` → do the thing → `git stash pop` (stash = temporary shelf for uncommitted edits). |
-| `detached HEAD` | You are viewing an old commit, not on a branch. | `git switch main` |
+| `detached HEAD` | You are viewing an old commit, not on any branch. | `git switch main` |
 | `Permission denied` / `403` | Not logged in, or no write access. | `gh auth login`; for others' repos, fork (4.8). |
 | `file exceeds GitHub's 100 MB limit` | A huge file is in a commit. | Ask the agent to remove it from the unpushed commit and add it to `.gitignore`. |
+| A file you added to `.gitignore` still shows up | It was committed before; `.gitignore` only affects untracked files. | `git rm --cached <file>`, then save. |

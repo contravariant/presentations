@@ -9,11 +9,11 @@ Codex (CLI and cloud) reads this file before working in the repo. Edit the first
 ## Git rules
 - Follow the `git-workflow` skill if available. Otherwise: show `git status` and the diff before every commit.
 - Commit messages: imperative, ≤ 72 chars, one logical change per commit.
-- Branching: <choose one> 
+- Branching: <choose one>
   - solo: commit directly to `main`; or
   - reviewed: never commit to `main`; work on a branch and open a pull request.
 - Never force-push, rebase, or `reset --hard` without asking. Prefer `git revert` for pushed commits.
-- Never commit secrets (`.env`, keys, tokens), files > 50 MB, or build output (`*.aux`, `*.log`, `__pycache__/`).
+- Never commit secrets (`.env`, keys, tokens), files > 50 MB (GitHub rejects > 100 MB), or build output (`*.aux`, `*.log`, `__pycache__/`).
 - Do not edit generated files (<e.g. PDFs in `output/`>) by hand; regenerate them.
 
 ## When working as Codex cloud

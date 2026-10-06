@@ -1,26 +1,39 @@
 # Git aliases for the everyday workflow. Installed by install.sh via
 #   git config --global include.path ~/.config/git/aliases
-# Usage: git st | git lg | git save "message" | git sync | git start <topic>
+# Usage: git st | git lg | git save ["message"] | git sync | git start <topic>
 #        git propose | git finish | git uncommit
+# "default branch" = the repo's main line on GitHub: usually main, in older repos master.
 [alias]
 	st = status -sb
 	lg = log --oneline --graph --decorate -20
 	sync = pull --no-rebase --no-edit
-	# Stage everything, commit, merge in GitHub's new commits, push.
-	save = "!f() { [ -n \"$1\" ] || { echo 'usage: git save \"message\"'; return 1; }; \
-		git add -A && git commit -m \"$1\" || return 1; \
+	# Name of the default branch (helper used below).
+	default = "!d=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null); d=${d#origin/}; echo ${d:-main}"
+	# Stage everything, commit (message required if there is something to commit),
+	# merge in GitHub's new commits, push. With nothing to commit, just pulls and pushes.
+	save = "!f() { git symbolic-ref -q HEAD >/dev/null || { echo 'not on a branch: run git switch main'; return 1; }; \
+		git add -A; \
+		if ! git diff --cached --quiet; then \
+			[ -n \"$1\" ] || { echo 'usage: git save \"message\"'; return 1; }; \
+			git commit -m \"$1\" || return 1; fi; \
 		if git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; \
 		then git pull --no-rebase --no-edit && git push; \
 		else git push -u origin HEAD; fi; }; f"
-	# New branch from an up-to-date main.
-	start = "!f() { [ -n \"$1\" ] || { echo 'usage: git start <topic>'; return 1; }; \
-		git switch main && git pull --no-rebase --no-edit && git switch -c \"$1\"; }; f"
-	# Push current branch and open a pull request.
-	propose = "!git push -u origin HEAD && gh pr create --fill"
-	# Merge this branch's PR on GitHub, return to an up-to-date main, delete the branch.
-	finish = "!f() { b=$(git branch --show-current); \
-		gh pr merge \"$b\" --merge --delete-branch || return 1; \
-		git switch main && git pull --no-rebase --no-edit; \
-		git branch -d \"$b\" 2>/dev/null; true; }; f"
-	# Undo the last commit, keeping its changes staged. Only for commits not yet pushed.
-	uncommit = reset --soft HEAD~1
+	# New branch from an up-to-date default branch.
+	start = "!f() { [ -n \"$1\" ] || { echo 'usage: git start <topic>'; return 1; }; d=$(git default); \
+		git switch \"$d\" && git pull --no-rebase --no-edit && git switch -c \"$1\"; }; f"
+	# Push current branch and open a pull request (refuses on the default branch).
+	propose = "!f() { d=$(git default); [ \"$(git branch --show-current)\" != \"$d\" ] || { echo \"on $d: run git start <topic> first\"; return 1; }; \
+		git push -u origin HEAD && gh pr create --fill; }; f"
+	# Merge this branch's PR (unless already merged on github.com), return to an
+	# up-to-date default branch, delete the branch locally and on GitHub.
+	finish = "!f() { d=$(git default); b=$(git branch --show-current); \
+		s=$(gh pr view \"$b\" --json state -q .state) || return 1; \
+		if [ \"$s\" = OPEN ]; then gh pr merge \"$b\" --merge || return 1; s=$(gh pr view \"$b\" --json state -q .state); fi; \
+		[ \"$s\" = MERGED ] || { echo \"PR state is $s, not merged (checks still running?). Nothing deleted.\"; return 1; }; \
+		git switch \"$d\" && git pull --no-rebase --no-edit || return 1; \
+		git branch -D \"$b\" 2>/dev/null; git push -q origin --delete \"$b\" 2>/dev/null; echo \"merged; on $d; $b deleted\"; }; f"
+	# Undo the last commit, keeping its changes staged. Refuses if already pushed.
+	uncommit = "!f() { if git merge-base --is-ancestor HEAD @{u} 2>/dev/null; \
+		then echo 'last commit is already on GitHub: use git revert HEAD instead'; return 1; fi; \
+		git reset --soft HEAD~1; }; f"
