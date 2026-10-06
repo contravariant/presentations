@@ -185,6 +185,7 @@ Follow-ups in the same Codex task ("also fix the bibliography") produce a new di
 | `CONFLICT (content)` | See 4.9. | |
 | `Please commit your changes or stash them` | Uncommitted edits block a pull/switch. | Commit them (4.4), or `git stash` → do the thing → `git stash pop` (stash = temporary shelf for uncommitted edits). |
 | `detached HEAD` | You are viewing an old commit, not on any branch. | `git switch main` |
+| `git@github.com: Permission denied (publickey)` | gh is set to the SSH protocol, but your Mac has no SSH key registered with GitHub. | `gh config set git_protocol https && gh auth setup-git`, then retry. |
 | `Permission denied` / `403` | Not logged in, or no write access. | `gh auth login`; for others' repos, fork (4.8). |
 | `file exceeds GitHub's 100 MB limit` | A huge file is in a commit. | Ask the agent to remove it from the unpushed commit and add it to `.gitignore`. |
 | A file you added to `.gitignore` still shows up | It was committed before; `.gitignore` only affects untracked files. | `git rm --cached <file>`, then save. |
