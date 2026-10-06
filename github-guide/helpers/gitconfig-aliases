@@ -1,0 +1,26 @@
+# Git aliases for the everyday workflow. Installed by install.sh via
+#   git config --global include.path ~/.config/git/aliases
+# Usage: git st | git lg | git save "message" | git sync | git start <topic>
+#        git propose | git finish | git uncommit
+[alias]
+	st = status -sb
+	lg = log --oneline --graph --decorate -20
+	sync = pull --no-rebase --no-edit
+	# Stage everything, commit, merge in GitHub's new commits, push.
+	save = "!f() { [ -n \"$1\" ] || { echo 'usage: git save \"message\"'; return 1; }; \
+		git add -A && git commit -m \"$1\" || return 1; \
+		if git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; \
+		then git pull --no-rebase --no-edit && git push; \
+		else git push -u origin HEAD; fi; }; f"
+	# New branch from an up-to-date main.
+	start = "!f() { [ -n \"$1\" ] || { echo 'usage: git start <topic>'; return 1; }; \
+		git switch main && git pull --no-rebase --no-edit && git switch -c \"$1\"; }; f"
+	# Push current branch and open a pull request.
+	propose = "!git push -u origin HEAD && gh pr create --fill"
+	# Merge this branch's PR on GitHub, return to an up-to-date main, delete the branch.
+	finish = "!f() { b=$(git branch --show-current); \
+		gh pr merge \"$b\" --merge --delete-branch || return 1; \
+		git switch main && git pull --no-rebase --no-edit; \
+		git branch -d \"$b\" 2>/dev/null; true; }; f"
+	# Undo the last commit, keeping its changes staged. Only for commits not yet pushed.
+	uncommit = reset --soft HEAD~1
