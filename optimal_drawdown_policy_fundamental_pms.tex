@@ -1,0 +1,381 @@
+\documentclass[11pt]{gappyarticle}
+
+% Shared notation lives at latex_old/newcommands.tex. Texifier builds from its
+% .texpadtmp subdirectory, whereas command-line TeX builds from this directory.
+\IfFileExists{../../newcommands.tex}{%
+  \input{../../newcommands.tex}%
+}{%
+  \input{../../../newcommands.tex}%
+}
+\emergencystretch=2em
+\widowpenalty=10000
+\clubpenalty=10000
+
+\title{Drawdown Management\\or, how I stopped worrying about volatility} 
+\author{gappy}
+\date{\today}
+
+\begin{document}
+\maketitle
+\raggedbottom
+
+Many PME/PM interactions are tactical and short-term, and too few focus on
+having conversations about principles. Ultimately, if you are going to be a
+better PM, it will not be because we (quantitative researchers or risk managers) keep you within
+limits. It will be because you set policies for yourself. Volatility management is one of those policies.  
+
+Many PMs default to one of two approaches: always run at 80\% of the volatility
+target, to leave more room before the drawdown trigger, or always run at 120\%
+or more, to maximize expected PnL. The first sacrifices earning capacity even
+when the book has ample room for losses. The second leaves little adjustment
+before the firm forces a cut. Neither rule responds to how much loss capacity
+remains. Higher risk also does not necessarily mean higher compounded growth.
+
+In this note, we advocate for the adoption of a simple policy: volatility scaling. 
+
+
+\begin{redbox}[Volatility Scaling: Portfolio Manager's Version]
+\begin{enumerate}
+\item Near the high-water mark, run at 115\% of target when the opportunities
+justify it. This leaves five percentage points below the authorized 120\%
+ceiling, so small fluctuations need not produce constant trading.
+\item Begin reducing risk once the drawdown uses a meaningful share of the
+allowance before the trigger, say 30\%. If the trigger is a \$4 million loss,
+that means \$1.2 million of losses, not a 30\% loss of capital. Start earlier
+if liquidity or event risk requires it.
+\item Reduce progressively toward 80\% of target by the intervention point.
+Do not automatically grow losers; trim positions where conviction has fallen,
+and choose the remaining trades to bring the whole book within budget.
+\item Restore risk as the book recovers away from the trigger, subject to
+the agreed schedule and the quality of the opportunities.
+\end{enumerate}	
+\end{redbox}
+ 
+
+Before getting into the nasty details, let us consider some high-level motivations.
+
+\section{Why agree on a rule before the losses arrive?}
+Consider the points of view of the PM and the firm:
+\begin{itemize}
+	\item 
+A PM can have correct investment theses and still run out of capital or patience
+before the investment pays off. 
+\item The firm also has obligations to other managers, and most of all to investors.
+\end{itemize}
+There are two broad means by which a firm manages risk at the portfolio level: volatility targeting and drawdown policy. They are complementary. 
+
+
+\begin{enumerate}
+	\item
+	{Volatility targeting controls risk per unit of time; a drawdown policy
+controls how risk changes along the path.} A volatility estimate describes
+the size of PnL fluctuations over a chosen period. It does not impose a
+maximum cumulative loss. 
+\item
+	An alternative way to look at them: volatility targeting controls the distribution; a drawdown policy controls the path. Running a book at constant vol does not give guarantees about cumulative loss — under constant vol the drawdown process is unbounded, so over a long enough career you hit any loss level with probability one. However, the PM and the firm don't want to exceed a maximum loss in every possible future. Drawdown policies achieve this goal on every realized path, not on average and not with high probability.
+\end{enumerate}
+Vol reduction exists to protect both you and the firm. \\ \\
+	\textbf{Benefits for the PM:}
+\begin{enumerate}
+	\item 
+	\textbf{It's a contract with your calmer self}. The moment your judgment is worst—deep in the hole, sunk costs everywhere, negotiating size with the CIO under duress—is exactly when the rule binds. Agreed at a high-water mark it costs nothing to accept and removes an argument you would probably lose later. It also caps the value of the gamble-for-resurrection that your own comp option quietly pays you to take.
+	\item 
+	\textbf{You already have a stop. Constant vol just guarantees you meet it at full size.} Every firm has a hard loss limit; the question was never whether you have one. Running constant vol until you touch it is the cliff-edge implementation of that limit: the largest forced trade, into the worst tape, with zero cushion left to work with. The proportional rule is the opposite — risk shrinks continuously as the cushion shrinks, so you approach the limit asymptotically and, absent gaps, never touch it. A drawdown policy is not the stop-loss; it's the thing that keeps you from ever meeting the stop-loss.
+	\item 
+	\textbf{It is optimal.} Say that your goal is to maximize the growth of your portfolio, while at the same time avoid reaching the final \emph{maximum} loss allowed by contract. This maximum loss is not the intermediate trigger: it is the sum of all the losses, across the sequence of triggers hit in the course of a long drawdown. Then it can be shown that volatility scaling is optimal: it will maximize your PnL while avoiding the absolute worst case.
+	\item 
+	\textbf{Drawdown policy uses observable information.} Exact, real-time, no model vol, no look-back window, no lag. Realized vol is an estimate — backward-looking, bandwidth-dependent, and most wrong precisely at regime breaks, which is exactly when the sizing decision carries the most weight. Vol targeting also smuggles in an empirical claim you may not actually believe: that your Sharpe is invariant to the vol regime. The drawdown rule requires no such belief about the world.
+	\item 
+	\textbf{Constant vol is perverse in the drawdowns that actually end careers.} The dangerous drawdown for a discretionary book is often the quiet one — a slow factor bleed, a crowded unwind, a thesis grinding down — where realized vol falls while you lose money. A constant-vol rule tells you to add gross into that. The cushion rule tells you to cut. Vol targeting de-risks only when losses arrive with turbulence; it is structurally blind to losses that arrive calmly. 
+	\item 
+	\textbf{The price is smaller than the intuition.} Implemented optimally (proportional de-risking, not a cliff), the frictionless Sharpe haircut is at most ~13\% — even at the tightest floor. What genuinely falls is growth, and it falls linearly in the drawdown budget. But that is a dial, not a defect: if you want more growth you negotiate a larger loss budget or more capital — you don't adopt a worse policy. Risk-adjusted quality is nearly intact; only the size of the bet shrinks. Per unit of realized log-volatility, the tighter rule actually scores better.
+	\end{enumerate}
+	\textbf{Benefits for the firm:}
+	\begin{enumerate}
+	\item
+	\textbf{The business case is asymmetric.} Investors redeem on drawdowns, not on volatility, and redemptions are convex in drawdown depth. Protecting the path protects the capital base — which is the thing that compounds. And the rule constrains size, never selection: full discretion on what you own, only how much scales with the cushion. You are never at zero, so you always keep the option to redeploy when the opportunity set turns.
+	\item
+	\textbf{The rule also addresses an incentive problem.} A PM can participate in the
+		upside of a larger bet without personally bearing all of the capital loss.
+		That option-like payoff can make gambling for resurrection attractive just
+		when the firm needs less risk. A pre-agreed reduction protects both sides.
+		Protecting the path of returns also helps protect the capital base: investors
+		may redeem after deep losses, reducing the capital available for future
+		opportunities.
+	\end{enumerate} 
+\section{Benefits}
+ 
+\begin{verbatim}
+	
+ library(tidyverse)
+library(magrittr)
+A <- read_csv('~/Google Drive/My Drive/latex_old/_STABLEPROJECTS/optimal drawdown policy/pm_stats.csv')
+A <- A[,!grepl('Calmar', names(A))]
+
+t.test(A$`Pnl ($mm) - Δ Dynamic (Reset) vs Actual`)
+
+
+t.test(A$`Max DD ($mm) - Dynamic (Reset)`)
+
+DF <- data.frame(actual= A %$% {`Pnl ($mm) - Actual`/`Max DD ($mm) - Actual`},
+                 reset = A %$% {`Pnl ($mm) - Dynamic (Reset)`/`Max DD ($mm) - Dynamic (Reset)`} 
+                 )
+
+DF %>% ggplot(aes(x=actual, y=reset)) +
+  geom_point(alpha = .4,color='red') + 
+  # geom_smooth(method = "lm", se = FALSE) +
+  geom_abline(slope = 1, intercept = 0, color='blue') +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_bw()
+
+# coefficient is 3.6% higher
+lm(reset ~ actual - 1, data=DF) %>% summary
+
+
+# coefficient is 3.6% higher
+lm(`Sharpe - Dynamic (Reset)` ~ `Sharpe - Actual` - 1, data=A) %>% summary
+
+lm(`Pnl ($mm) - Dynamic (Reset)` ~ `Pnl ($mm) - Actual` , data=A) %>% summary
+
+lm(`Max DD ($mm) - Dynamic (Reset)` ~ `Max DD ($mm) - Actual`  , data=A) %>% summary
+
+
+A %>% ggplot(aes(x=`Max DD ($mm) - Actual`,y=`Max DD ($mm) - Dynamic (Reset)`))+
+  geom_point() + 
+  # geom_smooth(method = "lm", se = FALSE) +
+  geom_abline(slope=1, intercept=0, color='blue') +
+  theme_bw()
+\end{verbatim}
+
+ 
+
+%\section{An example in dollars}
+%
+%Suppose the book's capital reached a {high-water mark} PnL of \$100 million, on a volatility target of \$70m. The book has a \$vol/GMV ratio of 4\%. The firm allows a maximum drawdown from that peak of 70\% of the target vol, so the
+%loss allowance is \$49m.
+%\[
+%\text{\emph{(loss allowance)}}
+%=\text{\emph{(peak capital)}}\times\text{\emph{(allowed drawdown)}}.
+%\]
+%Here the allowed drawdown is 8\%, or 0.08. The allowance is measured in dollars
+%and stays fixed until the recorded peak changes. Before the stop is reached,
+%\[
+%\text{\emph{(loss budget left)}}
+%=\text{\emph{(loss allowance)}}-\text{\emph{(loss since the peak)}}.
+%\]
+%
+%Now suppose the book loses \$4 million. Capital is \$96 million, with
+%\$4 million left before the stop. Half the original loss allowance remains.
+%Under the rule, the target is half the dollar risk the book was allowed to
+%take at its peak.
+%
+%Here \emph{dollar risk} means the portfolio's estimated volatility expressed in
+%dollars: a measure of the size of its PnL fluctuations over an agreed period.
+%It is different from the dollars invested, and it is not a maximum possible
+%loss. A book with \$10 million of annual dollar volatility can lose more than
+%\$10 million.
+%
+%Call the dollar volatility permitted at the peak the \emph{full dollar
+%volatility}. Use the same measurement period, such as one year, for both the
+%full budget and the current target.
+%
+%\Needspace{13\baselineskip}
+%\begin{redbox}[The practical rule]
+%Keep the same fraction of your full dollar risk as the fraction of your loss
+%budget that remains:
+%\[
+%\text{\emph{(target dollar volatility)}}
+%=\text{\emph{(full dollar volatility)}}\times
+%\frac{\text{\emph{(loss budget left)}}}{\text{\emph{(loss allowance)}}}.
+%\]
+%If half the loss budget is left, run half the full dollar risk. At or beyond
+%the final stop, the target is zero; a negative budget does not mean reversing
+%the portfolio.
+%\end{redbox}
+%
+%Table~\ref{tab:risk-schedule} shows the whole schedule for this example.
+%The percentages in the last column refer to the usual \emph{dollar-volatility
+%budget}, rather than to gross market value or a count of positions.
+%
+%\begin{table}[H]
+%\centering
+%\small
+%\begin{tabular}{lrr}
+%\toprule
+%Loss since the peak & Loss budget left & Usual dollar risk to keep \\
+%\midrule
+%\$0 million & \$8 million & 100\% \\
+%\$1 million & \$7 million & 88\% \\
+%\$2 million & \$6 million & 75\% \\
+%\$3 million & \$5 million & 63\% \\
+%\$4 million & \$4 million & 50\% \\
+%\$5 million & \$3 million & 38\% \\
+%\$6 million & \$2 million & 25\% \\
+%\$7 million & \$1 million & 13\% \\
+%\$8 million & \$0 million & 0\% \\
+%\bottomrule
+%\end{tabular}
+%\caption{An 8\% loss allowance on a \$100 million peak. Intermediate
+%percentages are rounded to two significant digits; the schedule between rows
+%is gradual.}
+%\label{tab:risk-schedule}
+%\end{table}
+%
+%For example, assume the usual budget is \$10 million of annual dollar
+%volatility. After a \$5 million loss, three-eighths of the loss allowance
+%remains:
+%\[
+%\text{\emph{(target dollar volatility)}}
+%=\$10\text{ million}\times\frac{\$3\text{ million}}{\$8\text{ million}}
+%=\$3.75\text{ million}.
+%\]
+%If the risk report expresses volatility as a percentage of current capital,
+%convert the dollar target using
+%\[
+%\text{\emph{(volatility as a percentage)}}
+%=\frac{\text{\emph{(dollar volatility)}}}{\text{\emph{(current capital)}}}
+%\times100\%.
+%\]
+%The \$3.75 million target is about 3.9\% of the remaining \$95 million. At the
+%peak, the same report would have shown 10\% on \$100 million. Scaling dollar
+%volatility and scaling a percentage of changing capital are not quite the
+%same calculation.
+%
+%The \$10 million starting budget is an illustration. It must be agreed in
+%light of the investment opportunities, the loss allowance, and how readily
+%the book can be reduced. The model provides a reason for this pattern of
+%reductions; it does not establish that any starting budget chosen by the desk
+%is optimal.
+ 
+ \section{FAQs and Practical Recommendations}
+
+\begin{enumerate}
+	\item \textbf{Compute the Scaling Factor.}
+	The recommended volatility a book should run is displayed in the Risk Dashboard\footnote{The approximate formula is
+	\begin{align*}
+		 \emph{(\$vol target)} \times \left[ 1.2  \frac{\emph{(\$distance to trigger)} }{\emph{(max allowed \$loss)}} + 0.8 \left(1-  \frac{\emph{(\$distance to trigger)} }{\emph{(max allowed \$loss)}} \right) \right]
+	\end{align*}
+	}. Based on the recommended volatility, the scaling factor at the position level is
+	\begin{align*}
+	\text{\emph{(current position multiplier)}} 
+ & = \frac{\text{\emph{(recommended \$vol)}}}
+{\text{\emph{(current \$ vol)}}}
+\end{align*}
+
+If the book currently carries \$40 million of dollar volatility and the recommended volatility
+is \$44 million, the multiplier is 1.1: indicatively add 10\% to each position.  
+\item \textbf{Then apply investment judgment}. A broken thesis may deserve a complete exit.
+A high-conviction position may deserve a larger share of the smaller budget.
+A stock that has become cheaper may deserve an addition funded by reductions
+elsewhere. The policy leaves these choices with the PM, subject to the new
+total risk budget. Which brings us to the next point.
+\item \textbf{This is a portfolio rule.} Applying a separate automatic stop to each losing
+stock would be a different investment policy. The portfolio limit tells the
+PM how much total risk is available; the research process decides which
+investments deserve it. The permitted budget is a ceiling, so there is no
+obligation to fill it when opportunities are poor.
+\item\textbf{When reducing risk, always consider style and industry risk.} Do not stop at ``technology is hurting'' or ``the sector is weak.'' Break the
+losses down by name, subsector, and shared investment theme. Work with the risk
+team to distinguish company-specific disappointments from common exposures
+such as market direction, growth, momentum, or crowded positioning. Sector
+and factor explanations can overlap; do not count the same loss twice.
+\item \textbf{In the grossing/degrossing process, separate risk trades from conviction trades.} When the diagnosis calls for a reduction by 5\% ,trimming a name by 5\% is not a reduced conviction trade. It is a risk management trade. If you do have a change in conviction, ask yourself two questions. First, did I have to wait for a risk reduction recommendation to change my views? There are good reasons, of course, like the acquisition on new information. But not always. Second, should I trim by 5\%? Why not a third or half? Never be captive to status quo bias.
+\item \textbf{Find new ideas while reducing risk.} Reducing risk can slow further losses; it does not create a better opportunity
+set. Make finding new ideas a priority instead of spending every research hour
+defending the existing book. A busy earnings season gives analysts many fresh
+results, revised outlooks, and changed prices to investigate. If you do not
+want to take risk through the earnings announcement, be equally active in the
+period immediately after it. Avoiding the print is not a reason to ignore
+what it reveals.
+ 
+\end{enumerate}
+%\section{How quickly should you trade?}
+%
+%Every change in PnL changes the remaining loss allowance, but trading after
+%every small movement would consume spreads and market impact. The paper's
+%transaction-cost analysis supports moving toward the desired risk level at a
+%measured pace. The practical question is how much risk can remain during
+%execution, given the loss capacity still available.
+%
+%With plenty of room before the stop, small deviations can be tolerated within
+%an agreed range. For a substantial reduction, a liquid book can usually move
+%faster than a concentrated book of difficult names. As the loss allowance
+%runs down, the room to wait shrinks. Start early enough to cover the time and
+%cost needed to exit; a gradual execution plan cannot by itself guarantee
+%compliance with the stop.
+%
+%Choosing trades requires looking at the book left behind. Selling only the
+%liquid names can leave a more concentrated and less liquid portfolio. An index
+%future may reduce market exposure quickly, but it will not remove the risk
+%of a company missing earnings or a crowded short being squeezed. Use a hedge
+%only for the risk it actually offsets, and measure the residual risk.
+%
+%The review frequency and tolerance for small deviations are implementation
+%choices to agree with the risk team. More urgent action is warranted when a
+%large loss, an upcoming event, or deteriorating liquidity could consume the
+%remaining allowance before the next review.
+%
+%Prepare explicitly for clusters of announcements. A week containing a Federal
+%Reserve decision and results from Microsoft and Meta, for example, can expose
+%several holdings to the same changes in rates, capital spending, or investment
+%expectations. Map the combined exposure and possible outcomes before the
+%events, then reassess after them. If a plausible adverse combination could
+%exhaust the remaining loss allowance, reduce or hedge the relevant exposure
+%before the announcements. Do not assume pre-event selling has removed
+%the risk, that tomorrow's announcements will answer every question, or that
+%waiting for clarity is affordable with the loss capacity left.
+%
+%If you already have a stop, running constant risk until you reach it leaves
+%the adjustment to the last moment. It can force a large trade when little
+%loss capacity and few execution choices remain. The purpose of progressive
+%reductions is to act while you still have choices, not merely to make the
+%eventual stop easier to administer.
+%
+%\section{What happens when the book recovers?}
+%
+%The schedule works in both directions. In the example, a \$5 million loss
+%leaves \$3 million of loss capacity and permits about 38\% of the usual dollar
+%risk. If the book recovers until the loss is only \$3 million, the remaining
+%capacity rises to \$5 million and the permitted risk rises to about 63\%.
+%Risk can be rebuilt as the losses are earned back, provided the investment
+%case still supports it.
+%
+%A new portfolio peak raises the reference point. If capital grows to
+%\$110 million, an 8\% drawdown allowance is \$8.8 million and the new stop is
+%\$101.2 million. If the agreed full risk budget remains 10\% of capital, it
+%becomes \$11 million of dollar volatility at the new peak; subsequent
+%reductions start from that amount. During subsequent losses, that peak stays
+%in place. A new
+%month or quarter should not silently erase a drawdown. External capital flows
+%also need to be handled consistently so that a subscription does not count
+%as investment performance.
+%
+%Recovery can be slow when little risk remains. With small positions, even
+%good investment results generate modest dollar PnL. This is part of the
+%economic cost of protecting the remaining capital, including when the
+%reduction was made exactly as planned.
+%
+%In the ideal continuous-price model, the proportional rule leaves positive
+%risk while there is positive loss capacity and does not reach the floor in
+%finite time when started above it. That preserves some exposure to a recovery,
+%however small. It is not a promise that a live book can never stop out.
+%At the stop, the schedule permits zero investment risk. A flat book cannot
+%trade its way back. Any restart therefore needs an explicit decision about
+%fresh loss capacity and the terms for resuming investment. That decision
+%should be anticipated when the original policy is agreed.
+%
+%\subsection{Make today Day 1, without resetting the loss record}
+%
+%This business is difficult even for capable, experienced investors. Forgive
+%the mistakes without discarding their lessons, and make today or tomorrow
+%Day 1 of a renewed research effort. Ask what you would want to own now, at
+%today's prices and with today's information, rather than what would vindicate
+%the old book. Give analysts concrete questions and new ideas to pursue.
+%This resets the team's attention, not its high-water mark or loss allowance.
+%Neither renewed confidence nor a fresh idea authorizes a larger aggregate
+%risk budget before the agreed policy permits it.
+%
+%  
+
+\end{document}
