@@ -1,0 +1,895 @@
+\documentclass[11pt]{gappyarticle}
+\usepackage{xparse}
+\usepackage{listings}
+\lstdefinestyle{capallocpython}{language=Python,
+    basicstyle=\ttfamily\footnotesize, columns=fullflexible,
+    keepspaces=true, showstringspaces=false, upquote=true, breaklines=true,
+    frame=single, rulecolor=\color{black!25},
+    keywordstyle=\color{blue!60!black}, commentstyle=\color{black!60}}
+
+% Shared notation from latex_old; also support Texifier temporary builds.
+\IfFileExists{../../newcommands.tex}{%
+  \input{../../newcommands.tex}%
+}{%
+  \input{../../../newcommands.tex}%
+}
+
+\title{An Equities Capital Allocation Framework}
+\author{gappy}
+\date{\today}
+
+\begin{document} 
+\maketitle
+\section{Introduction}
+We consider the problem of allocation risk to multiple investment units (``strategies'') controlled by a parent firm. This is a central problem in investment. We list below our assumptions, the main thrust behind the approach, and the findings. We don't claim that this approach is universal. We critique our assumptions, and highlights their limits. However, we show how alternative methods can address them. 
+
+
+\subsection{Assumptions}
+\begin{enumerate}
+	\item The measure of risk employed is dollar volatility, both at the strategy and firm level.
+	\item The objective of the firm is to maximize dollar profit during the investment period.
+	\item The firm has a risk budget.
+	\item Investment units may have additional constraints, such as a maximum risk that they want to deploy.
+    \item The Sharpe Ratio of the strategies is uncertain. An important component of the framework is the modeling of the uncertainty and its incorporation in the optimization problem.
+    \item Transaction costs follow the square root law of Kyle. 
+    \item When strategies increase or decrease their risk, they do so without changing their trading behavior.
+\end{enumerate}
+\subsection{Applicability and Limits}
+\begin{enumerate} 
+	\item We use volatility and Sharpe Ratio as measures of risk and performance, respectively. The criticisms levied against the use of volatility as a sufficient risk measure apply here. Loosely speaking, strategies that are based on differences in beliefs about future states of the world are better suited for this approach. These include discretionary and systematic investing in many asset classes, provided that they  entail broad portfolios and with sufficiently long holding times. These requirements mitigate the impact of extreme events in the strategy. Long/short and systematic equity, systematic credit and macro are suitable for the framework. Strategies that rely on exploitation of short-horizon market microstructure (high-frequency trading), narrow strategies (macro directional), strategies that rely on market imperfections (index rebalancing and arbitrage strategies like ETF AMP, converts, D1, EFP, etc.) are not suitable for the analysis.
+	\item The objective function is sensible for most hedge funds. Furthermore the mean-variance formulation is suitable as an approximation of log-growth (Kelly criterion).
+	\item The square root market impact law holds across orders of magnitude of participation rates, asset classes, and trading mechanisms. However, we ignore propagation effects in the market impact. We believe this assumption to be effectively justified in almost all interesting applications.
+	\item It is possible to include cross-impact term among strategies, although we do not purse such an extension here. First, this is a second-order correction to transaction costs, and to the overall capital allocation problem. Secondly, estimating the cross-impact is not trivial.
+	\item Modeling Sharpe distribution of a PM, on the other side, is an essential element of the entire framework.  An any point in time, we model the Sharpe Ratio of a PM as a normally distributed random variable with known mean and variance. When hiring a portfolio manager, there is a high degree of uncertainty about their performance, and understanding how it gets resolved over time is important for capital allocation.
+	\item We assume that the correlations between strategy returns are stable over time. This assumption can be checking empirically. We find that, in general the correlations are stable in applications.
+	\end{enumerate}
+
+
+\section{Model}
+\subsection{Qualitative formulation}
+The model consists of three empirical inputs: a skill model, a cost model, and a risk model. Together with single-strategy constraints provided by the firm, they are part of the optimization problem that generates the optimal allocation.
+
+\begin{center}
+\begin{tikzpicture}[
+    model/.style={draw, rounded corners=2pt, align=center,
+        text width=3.2cm, minimum height=1cm, inner sep=5pt,
+        font=\small, fill=yellow!20},
+    flow/.style={-{Stealth[length=2mm]}, thick}
+]
+    \node[model] (skill) at (-4.2,1.5) {Skill model\\(Sharpe)};
+    \node[model] (impact) at (-4.2,0) {Cost model\\ (Impact)};
+    \node[model] (risk) at (-4.2,-1.5) {Risk model\\ (Correlations)};
+    \node[model, fill=blue!8] (optimization) at (0,0)
+        {Optimization model};
+    \node[model, fill=green!20, text width=2.5cm] (allocation) at (4,0)
+        {Optimal allocation};
+    \node[model] (constraints) at (0,-2.4)
+        {Single-strategy\\constraints};
+
+    \draw[flow] (skill.east) -- (optimization.north west);
+    \draw[flow] (impact.east) -- (optimization.west);
+    \draw[flow] (risk.east) -- (optimization.south west);
+    \draw[flow] (constraints.north) -- (optimization.south);
+    \draw[flow] (optimization.east) -- (allocation.west);
+\end{tikzpicture}
+\end{center}
+\begin{redbox}[Natural-language description of the capital allocation problem] 
+\begin{align*}
+	&\emph{maximize} \emph{ the sum of the strategies' expected PnL} \\
+	&\qquad \emph{where each strategy PnL is the expected value of strategy Sharpe $\times$ strategy volatility}\\
+	&\qquad\qquad\emph{minus the strategy's execution costs}\\
+	&\qquad\emph{and the firm's risk is less or equal than a given volatility budget}\\
+	&\qquad \emph{and each strategy's volatility is greater than zero and possibly bounded above}
+\end{align*}
+\end{redbox}
+\subsection{Skill Model}
+For each portfolio manager (PM), the skill model combines their track record
+with historical PM performance. The calculation has two steps: estimate a prior
+distribution from historical data, then update it using the PM's observed
+returns. We update the skill distribution at the PM
+level\footnote{In BAM, it does so by using an ACU Group for a combined book and the core ACU
+otherwise. See Capital Allocation Model documentation,
+\texttt{docs/skill.md}, and implementation, \texttt{app/skill/bayesian.py},
+in \texttt{PMDanalytics/capital-allocation-backend}.}.
+
+To estimate the prior, we first calculate an empirical annual Sharpe Ratio
+for each historical PM using their full life-to-date return history.
+Let $r_{i,t}$ be PM $i$'s daily return on GMV, $n_i$ the number of daily
+observations, and $T=250$ the number of trading days per year. With
+$\overline r_i$ and $\hat\sigma_{r_i}$ denoting the sample mean and standard
+deviation of daily returns, the life-to-date Sharpe estimate is
+\begin{align}
+    \hat s_i = \sqrt{T}\,
+    \frac{\overline r_i}{\hat\sigma_{r_i}} .
+\end{align}
+We then compute the sample mean of these Sharpe estimates within each sector
+and their sample variance across historical PMs. The sector mean $m_k$ supplies
+the prior mean, and the pooled variance $\tau_0^2$ supplies the prior variance.
+This is the \emph{empirical-Bayes} step: the parameters of the prior are
+estimated from the historical cross-section. For a PM in sector $k(i)$, we use
+\begin{align}
+    s_i \sim N\bigl(m_{k(i)},\tau_0^2\bigr).
+\end{align}
+
+To update this prior, calculate a current PM's own life-to-date Sharpe $\hat s_i$
+using the same formula. Under the independent-return approximation,
+$h_i=n_i/T$ is the length of the track record in years. It enters the update
+because the annualized Sharpe estimate has approximate sampling variance
+$T/n_i=1/h_i$: a one-year record has a Sharpe standard error of approximately
+one, whereas a four-year record has a standard error of approximately one-half.
+Thus $h_i$ measures the information in the PM's track record.
+
+Here $\hat s_i$ is the same empirical Sharpe estimate defined above; once the
+returns have been observed, it is a known number. The unknown quantity $s_i$
+is the PM's true annual Sharpe Ratio. Different samples of returns would give
+different values of $\hat s_i$, even for the same true $s_i$. We approximate
+this sampling error by the normal observation model
+\begin{align}
+    \hat s_i = s_i+\frac{Z_i}{\sqrt{h_i}},
+    \qquad Z_i\sim N(0,1).
+\end{align}
+The observed estimate is therefore the true Sharpe plus a zero-mean sampling
+error with standard deviation $1/\sqrt{h_i}$ and variance $1/h_i$.
+This approximation assumes no serial dependence and an adequately estimated
+return volatility. If returns are serially dependent, replace $n_i$ by an
+effective number of independent observations before calculating $h_i$;
+$h_i$ then measures the effective length of the record in years.
+
+\needspace{10\baselineskip}
+The normal prior is conjugate to this normal likelihood, so the updated
+distribution is also normal. Its parameters are calculated directly.
+First calculate the weight $w_i$ on the PM's observed Sharpe, then the
+weighted mean $\mu_i$ and posterior variance $\tau_i^2$:
+\begin{yellowboxedequation}
+    w_i &:= \frac{\tau_0^2}{\tau_0^2+h_i^{-1}}
+          =\frac{h_i\tau_0^2}{1+h_i\tau_0^2},\\
+    \mu_i &:= (1-w_i)m_{k(i)}+w_i\hat s_i,\\
+    \tau_i^2 &:= \frac{1}{\tau_0^{-2}+h_i}
+               =\frac{\tau_0^2}{1+h_i\tau_0^2}.
+\end{yellowboxedequation}
+The variance calculation adds the prior's precision $\tau_0^{-2}$ to the
+track record's precision $h_i$ and takes the reciprocal. The resulting
+posterior is $s_i\mid\hat s_i\sim N(\mu_i,\tau_i^2)$.
+
+Thus a short record remains close to the sector prior and has a wide
+posterior, whereas a longer record receives more weight. We estimate the
+cross-sectional prior dispersion after excluding PMs with less than nine
+months of history, and clip sector and PM Sharpe forecasts to predefined
+ranges. An alternative baseline skill model uses the simpler
+$w_i=\min\{n_i/780,1\}$ and an empirically specified, decreasing uncertainty
+curve. In either case the optimizer receives both $\mu_i$ and $\tau_i$; using
+only the posterior mean would over-allocate to imprecisely measured winners.
+
+Observed returns are net of historical trading costs, while the allocation
+objective subtracts projected costs at the \emph{proposed} size.
+Let $G_i$ denote strategy $i$'s gross market value (GMV),
+$G_i^{\mathrm{hist}}$ its average historical GMV, and
+$v_i^{\mathrm{hist}}$ its annualized realized dollar volatility.
+The function $\widehat C_i(G)$ estimates strategy $i$'s annual execution
+cost in dollars at GMV $G$. We add the estimated historical annual cost
+back to net Sharpe to obtain the gross Sharpe input:
+\begin{align}
+    \mu_i^{\mathrm{gross}}
+    \simeq \mu_i^{\mathrm{net}}
+       +\frac{\widehat C_i(G_i^{\mathrm{hist}})}
+                   {v_i^{\mathrm{hist}}}.
+\end{align}
+This add-back avoids
+charging historical costs and projected costs twice. Subsequent formulas use
+$s_i=\mu_i^{\mathrm{gross}}$ when expected PnL and prospective costs are
+modeled separately. The diagonal approximation
+$\bOmega_\bs=\operatorname{diag}(\tau_1^2,\ldots,\tau_n^2)$ treats
+uncertainty in PM skill as independent across teams.
+\subsection{Cost Model}
+Scaling a PM's book increases both gross opportunity and execution costs.
+To estimate costs at a proposed book size, we fit a power law using historical
+monthly GMV, turnover, and trading costs.\footnote{Capital
+Allocation Model documentation, \texttt{docs/market\_impact.md}; coefficient
+fitting in \texttt{app/market\_impact/market\_impact\_coefficients.py} and
+the cost objective in \texttt{app/optimizer/opt\_setup.py}.}
+
+For monthly average GMV $G_i$, monthly turnover
+$T_i=Q_i/G_i$ (notional traded $Q_i$ divided by GMV), and monthly
+transaction cost $C_i$, the fitted relationship is
+\begin{align}
+    \frac{C_i}{T_i}\simeq a_iG_i^{3/2},
+    \qquad C_i(G_i)\simeq a_i T_i G_i^{3/2}.
+\end{align}
+The first expression is estimated from monthly observations in a rolling
+window; sparse or unavailable PM-specific coefficients can be replaced by a
+pooled estimate. The $3/2$ exponent reflects notional traded growing with
+size while unit impact grows approximately with its square root. It presumes
+that turnover and the traded universe remain broadly unchanged under scaling.
+If monthly turnover and the fitted coefficient persist, the annual cost is
+$\widehat C_i^{\mathrm{yr}}(G_i)\simeq 12a_iT_iG_i^{3/2}$.
+
+Let $\rho_i>0$ be annual dollar volatility per dollar of GMV, so that a
+candidate dollar-volatility allocation $x_i$ requires $G_i=x_i/\rho_i$.
+Absorbing turnover and annualization into $\tilde a_i=12a_iT_i$, we obtain
+\begin{align}
+    \widehat C_i^{\mathrm{yr}}(x_i)
+       &=\tilde a_i\left(\frac{x_i}{\rho_i}\right)^{3/2},\\
+    \frac{\partial}{\partial x_i}
+       \bigl(s_i x_i-\widehat C_i^{\mathrm{yr}}(x_i)\bigr)
+       &=s_i-\frac{3\tilde a_i}{2\rho_i^{3/2}}\sqrt{x_i}.
+\end{align}
+The marginal expression defines the PM's stand-alone efficient scale before
+portfolio risk, uncertainty, and position constraints. It also shows why
+transaction costs must be recomputed at each proposed allocation rather than
+scaled linearly from the observed cost. The allocation objective retains
+this $3/2$-power cost function. The cost fit omits cross-impact among teams.
+
+\subsection{Risk Model}
+The allocation benefits from diversification only to the extent that
+strategies' future returns differ. Direct pairwise covariance estimates are
+particularly noisy for new books. We estimate a sector factor structure and
+a PM-specific residual component, imputing parameters for short
+histories.
+%\footnote{Capital Allocation Model documentation,
+%\texttt{docs/cov.md}, and implementation,
+%\texttt{app/cov/cov\_sector\_model.py}. The optimizer's risk constraints are
+%in \texttt{app/optimizer/opt\_setup.py}.}
+
+For each strategy, write its return on GMV as
+\begin{align}
+    r_{i,t}=\alpha_i+\beta_i F_{k(i),t}+\epsilon_{i,t},
+    \qquad \operatorname{Cov}(\epsilon_{i,t},F_{k(i),t})=0,
+\end{align}
+where $F_{k(i),t}$ is its sector's average return on GMV. Estimate the
+cross-sector covariance $\bOmega_\bff$ from contemporaneous sector returns,
+and estimate each $\beta_i$ and residual variance by regression with an
+intercept. Take $\bB$ to have factors in its rows and strategies in its
+columns, matching the optimizer's exposure convention; the covariance
+estimator stores its transpose. The covariance matrix is therefore
+\begin{align}
+    \bOmega_\br
+       =\bB\transpose\bOmega_\bff\bB+\bOmega_\bepsilon,
+       \qquad
+    \bOmega_\bepsilon
+       =\operatorname{diag}\!\left(
+          \operatorname{Var}(\epsilon_1),\ldots,
+          \operatorname{Var}(\epsilon_n)\right).
+\end{align}
+The diagonal residual term is an assumption, not an empirical finding of zero
+residual overlap. Positive covariance between sector factors increases the
+joint risk of allocating to PMs in those sectors even when their individual
+forecasts are attractive.
+
+We compute sector means after a GMV filter and estimate annual factor
+covariance from roughly one year of daily returns. We normally require
+about three months of PM observations for a regression. For a shorter
+record, we set the own-sector loading to one and impute the residual
+variance from its sector median (falling back to a sector variance when
+needed). This limits spurious diversification credits for a new book. The
+factor decomposition is estimated from realized returns and is not, by
+itself, a forecast of changing exposures. The optimizer may alternatively
+use a separately supplied factor-exposure matrix and factor covariance,
+which need not coincide with the sector-factor estimates.
+
+To express allocations $x_i$ as \emph{annual dollar volatility}, the return
+covariance used with them must have unit diagonal. If $\bOmega_\br$ is first
+estimated in annualized return-on-GMV units, let
+$d_i=\sqrt{[\bOmega_\br]_{ii}}$ and
+$\mathbf D=\operatorname{diag}(d_1,\ldots,d_n)$. Then the consistently normalized
+inputs are $\bB\leftarrow\bB\mathbf D^{-1}$ and
+$\bOmega_\bepsilon\leftarrow\mathbf D^{-1}\bOmega_\bepsilon\mathbf D^{-1}$;
+the resulting covariance is
+$\mathbf D^{-1}\bOmega_\br\mathbf D^{-1}$. Firm volatility is consequently
+\begin{align}
+    \sigma_{\mathrm{firm}}(\bx)
+       =\sqrt{\bx\transpose\bOmega_\br\bx}
+       =\sqrt{\bx\transpose\bOmega_\bepsilon\bx
+             +(\bB\bx)\transpose\bOmega_\bff(\bB\bx)},
+\end{align}
+where $\bOmega_\br$ in the last display denotes the \emph{normalized}
+matrix. One may cap total volatility or impose distinct residual and factor
+limits as in the formulation below.
+
+\subsection{Quantitative Formulation}
+The allocation problem has two nonnegative decision variables per PM:
+$x_i$, its annualized dollar-volatility target, and $g_i$, its GMV target.
+All dollar quantities must use the same units. Let $s_i$ be the expected
+\emph{gross} annual Sharpe from the skill
+model, $\tau_i$ its posterior standard deviation, and $\rho_i$ the annual
+return volatility per dollar of GMV. As above, write
+\begin{align}
+    \bS&=\operatorname{diag}(\rho_1,\ldots,\rho_n),&
+    \bOmega_\bs&=\operatorname{diag}(\tau_1^2,\ldots,\tau_n^2),&
+    \bx&=\bS\mathbf g.
+\end{align}
+The last equality makes $s_i x_i$ expected gross annual dollar PnL.
+The coefficient $a_i^{\mathrm{opt}}$ below is the market-impact coefficient
+\emph{after} incorporating turnover, annualization, and the chosen
+dollar units. It is distinct from the fitted monthly coefficient $a_i$.
+
+The skill-uncertainty penalty follows from the variance of conditional
+expected PnL. Consider a single strategy with a fixed dollar-volatility
+allocation $x$. Write $\tilde s$ for its unknown true gross annual Sharpe,
+whose posterior mean is $s$ and posterior variance is $\tau^2$.
+All expectations below use the information available when the allocation
+is chosen. Conditional on $\tilde s$, expected gross annual dollar PnL is
+$M=x\tilde s$. Averaging over the posterior distribution of Sharpe gives
+\begin{align}
+    E[M] &= xE[\tilde s]=sx,\\
+    E[M^2] &= x^2E[\tilde s^2]
+             =x^2(s^2+\tau^2),\\
+    \operatorname{Var}(M)
+        &=E[M^2]-(E[M])^2=\tau^2x^2.
+\end{align}
+Subtracting the squared mean from the second moment gives the centered
+variance. The skill risk is therefore $\tau^2x^2$. Doubling the allocation
+doubles expected PnL and quadruples the variance due to skill uncertainty.
+
+Realized PnL also contains return noise. To separate the two sources of
+risk, let $r$ be the strategy's annual gross return normalized to unit
+conditional volatility, so that
+\begin{align}
+    E[r\mid\tilde s]&=\tilde s,
+    &\operatorname{Var}(r\mid\tilde s)&=1.
+\end{align}
+Using these conditional moments, the mean, second moment, and centered
+variance of realized gross PnL $P=xr$ are
+\begin{align}
+    E[P]&=sx,\\
+    E[P^2]&=x^2E[1+\tilde s^2]
+             =x^2(1+s^2+\tau^2),\\
+    \operatorname{Var}(P)
+        &=E[P^2]-(E[P])^2=x^2+\tau^2x^2.
+\end{align}
+The first variance term is market-return risk conditional on skill; the
+second is the additional risk arising from uncertainty about skill.
+
+For several strategies, conditional expected PnL is
+$M=\sum_i x_i\tilde s_i$. With posterior Sharpe covariance
+$\bOmega_\bs=\operatorname{diag}(\tau_1^2,\ldots,\tau_n^2)$, we obtain
+\begin{align}
+    E[M]&=\sum_i s_i x_i,\\
+    \operatorname{Var}(M)
+        &=\bx\transpose\bOmega_\bs\bx
+          =\sum_i\tau_i^2x_i^2.
+\end{align}
+We control market-return risk through the volatility constraints and
+charge $\lambda_{\mathrm{skill}}$ for each unit of uncertainty variance
+in expected PnL. Subtracting this charge from expected net PnL gives the
+quadratic term $-\lambda_{\mathrm{skill}}\bx\transpose\bOmega_\bs\bx$.
+The posterior determines the variance; we choose
+$\lambda_{\mathrm{skill}}$ to specify how much the firm pays to reduce
+this source of risk. Projected execution costs are treated as fixed at
+each proposed allocation and deducted from expected PnL.
+
+With $V_{\mathrm{tot}}$ denoting the risk budget and
+$\lambda_{\mathrm{tc}},\lambda_{\mathrm{skill}}\geq0$ denoting cost and
+skill-uncertainty scalars, the documented total-risk formulation is
+\begin{align}
+    \max_{\bx,\mathbf g}\quad&
+        \sum_{i=1}^n s_i x_i
+        -\lambda_{\mathrm{tc}}
+             \sum_{i=1}^n a_i^{\mathrm{opt}} g_i^{3/2}
+        -\lambda_{\mathrm{skill}}\,
+             \bx\transpose\bOmega_\bs\bx
+        \label{eq:capalloc_documented}\\
+    \suchthat\quad&
+        \bx=\bS\mathbf g,\qquad \mathbf g\geq0, \label{eq:capalloc_scale}\\
+    &\underline{x}_i\leq x_i\leq\overline{x}_i,
+        \qquad i=1,\ldots,n, \label{eq:capalloc_box}\\
+    &\sqrt{\bx\transpose\bOmega_\br\bx}
+        \leq V_{\mathrm{tot}}. \label{eq:capalloc_total_risk}
+\end{align}
+The first term is expected gross PnL, the second is projected transaction
+cost at the proposed GMV, and the third prices the posterior variance of
+conditional expected PnL derived above. The coefficient
+$\lambda_{\mathrm{skill}}$ has inverse-dollar units so that its product
+with a dollar-PnL variance remains in dollars.
+Diversification enters through the covariance constraint, rather than an
+additional correlation penalty in the objective.
+
+Sector and region limits bound their shares of the \emph{sum of individual}
+dollar-volatility targets, which generally differs from portfolio volatility.
+Let $\mathcal{S}_k$ and $\mathcal{R}_\ell$ denote the PMs in sector $k$ and
+region $\ell$, respectively. The implemented share bounds take the form
+\begin{align}
+    \underline q_k^{\mathrm{sec}}\sum_i x_i
+       &\leq \sum_{i\in\mathcal{S}_k}x_i
+        \leq\overline q_k^{\mathrm{sec}}\sum_i x_i,
+        &&\text{for each sector }k,\\
+    \underline q_\ell^{\mathrm{reg}}\sum_i x_i
+       &\leq \sum_{i\in\mathcal{R}_\ell}x_i
+        \leq\overline q_\ell^{\mathrm{reg}}\sum_i x_i,
+        &&\text{for each region }\ell.
+\end{align}
+The bounds $\underline{x}_i,\overline{x}_i$ limit the change in a PM's
+target relative to its existing allocation. The fractions for each
+partition must be jointly feasible with those individual bounds.
+
+An alternative to the total-risk cap \eqref{eq:capalloc_total_risk}
+is to impose separate idiosyncratic and factor-volatility caps:
+\begin{align}
+    \sqrt{\bx\transpose\bOmega_\bepsilon\bx}
+       &\leq V_{\epsilon},\\
+    \by&=\bB\bx,\qquad
+    \sqrt{\by\transpose\bOmega_\bff\by}\leq V_f .
+\end{align}
+Here $\bB$ and $\bOmega_\bepsilon$ have the normalized, dollar-volatility
+convention established in the risk section. If the covariance inputs are
+instead annual return-on-GMV covariances, the equivalent risk calculation uses
+$\mathbf g$ in these quadratic forms and the \emph{unnormalized} factor
+exposures; mixing the two conventions would misstate the risk budget.
+An aggregate cap in addition to the two component caps would be a different,
+potentially more restrictive specification.
+
+The $g_i^{3/2}$ penalty is convex for $g_i\geq0$. With nonnegative penalty
+coefficients and positive-semidefinite covariances, the objective is concave
+and the feasible set is convex. The next section retains the
+$3/2$-power cost function, solves the diagonal-covariance problem exactly,
+and approximates the effect of the off-diagonal covariance.
+% \section{Refined Version}
+% In this simplified version, we make two approximations and one extension:
+% \begin{enumerate}
+%     \item The correlation between idiosyncratic returns are small.
+%     \item The factor variance term is small, either in real terms, or because its importance (or penalty) is down-weighted.
+%     \item The overlaps in trading among PMs are explicitly modeled.
+% \end{enumerate}
+% In the following, we separate the diagonal and off-diagonal terms in the idio covariance matrix: $\bOmega_\bepsilon=\bOmega_d+\bOmega_o$. the matrix $\b\Omega_d$ is diagonal and positive definite; the matrix $\bOmega_o$ has only off-diagonal terms. It is symmetric but not necessarily positive definite. Furthermore, we extend the t-costs to off-diagonal interactions. We write down the formula first; we'll justify it later. First, let $\ba:=(a_1,\ldots, a_n)$ and $\bA_d:=\diag{\ba}$. Let $\bA_o$ be a matrix with only off-diagonal terms. Then the problem is 
+% \begin{align}
+%     \max\, &  \bs\transpose\bx - \bx\transpose (\nu(\bOmega_\bs+\bOmega_d) +\bA_d) \bx   \\
+%     &-  \bx\transpose (\nu\bOmega_o +\lambda \bB\transpose\bOmega_\bff\bB+\bA_o) \bx \\
+%     \suchthat\,  &\bv^m\le \bS \bx\le \bv^M
+% \end{align}
+% This formulation allows for a further simplification, which also help interpret the final allocation. The idea is that the term 
+% $$g(\bx,\bz):= -   \bx\transpose (\nu \bOmega_o +\lambda \bB\transpose\bOmega_\bff\bB+\bA_o) \bx  $$
+% is small, because the idio correlations among strategies are small, the factor risks are also small, and in addition they should be down-weighted because they are hedgeable (in principle, at least), and the interaction terms in execution costs are small as well. Therefore, we can first solve a problem that does not include this term, and then modify the solution by using the Envelope Theorem for optimization, without having to reoptimize. The resulting solution is more intuitive because the modifier terms appear as penalties to a core allocation. 
+
+% The first-stage problem is
+% \begin{align}
+%     \max\, &  \bs\transpose\bx - \bx\transpose (\nu (\bOmega_\bs+\bOmega_d)+\bA_d) \bx   \\
+%     \suchthat\,& \bv^m\le \bS \bx\le \bv^M
+% \end{align}
+% which is separable in the variables: we solve $n$ problems
+% \begin{align}
+%     \max\, & s_i x_i -\nu \tilde\sigma_i^2 x_i^2 - a_i x_i^2\\ 
+%     &v^m_i\le \sigma_i x_i \le v^M_i
+% \end{align}
+% where $\tilde\sigma_i^2:=\sigma_{\bepsilon,i}^2+\tau_i^2$. The optimal solution of the first-stage problem is
+% \begin{align}
+%     x_i^{(1)} =  \frac{ s_i}{2(\nu\tilde\sigma_i^2+a_i)} 
+% \end{align}
+% if $\sigma_i x_i^{(1)}\in[v_i^m, v_i^M]$. Otherwise, set $x_i^{(2)} := \min\{\max\{x_i^{(1)}, v^m_i/\sigma_i\},v_i^M/\sigma_i \}$.
+% The parameter $\nu$ should be chosen iteratively, so that $\sum_i (\sigma_i x_i^{(1)})^2=\sigma_\epsilon^2$.
+
+
+% Now, linearize the perturbation term at $\bx^{(1)}$. 
+
+% We denote with $\circ$ the element-wise vector multiplication.
+% \begin{align}
+%     \bu:=&\left. \nabla_\bx \left[ \bx\transpose (\bA_d+\lambda \bB\transpose\bOmega_\bff\bB) \bx + \bz\transpose \bA \bz\right]\right|_{\bx=\bx^{(1)}} \\
+%     =&  2(\bA_d+\lambda \bB\transpose\bOmega_\bff\bB) \bx^{(1)} +\frac{3}{2}(\bx^{(1)})^{-1/4} \circ\bA (\bx^{(1)})^{3/4}
+% \end{align}
+% Then, solve the perturbed problem:
+% \begin{align}
+%     \max\, &  (\bs-\bu)\transpose\bx - \nu \bx\transpose (\bOmega_\bs+\bOmega_d) \bx - \bz\transpose \bC \bz \\
+%     \suchthat\,& z_i=x_i^{3/4} \qquad i=1,\ldots, n\\
+%     &\bv^m\le \bS \bx\le \bv^M
+% \end{align}
+% to get the solution
+% \begin{align}
+%     x_i^{(3)} = \left(\frac{-c_i + \sqrt{c_i^2 + 4\nu\tilde\sigma_i^2 (s_i-u_i)}}{2\nu \tilde\sigma_i^2}\right)^2
+% \end{align}
+% The last step consists of ensuring that the box constraints are satisfied:
+% $$x_i^{(4)} = \min\{\max\{x_i^{(3)}, v^m_i/\sigma_i\},v_i^M/\sigma_i \}$$
+% The interpretation of the terms $u_i$ is that it is a Sharpe penalty. For example, set $\lambda=0$ and $\bA=0$. Then $\bu=2\bA_d\bx^{(2)}$. If the off-diagonal covariance term $q_{i,j}$ is positive and $x_j^{(2)} > 0$, then we are reducing the Sharpe Ratio of asset $i$ because it overlaps with asset $j$. A similar reasoning applies to factor contribution and t-cost interaction.
+
+% Summing up, below are the step of the process:
+% \begin{enumerate}
+%     \item \textbf{Inputs}: 
+%     \begin{itemize}
+%         \item Information Ratio distribution by ACU: expected $_i$ and stdev $\tau_i$
+%         \item Expected standardized exposures (by ACU per dollar \$vol): $\bB_{\cdot, i}$
+%         \item Max and min vol per ACU, $v_i^m, v_i^M$
+%         \item Idio and factor covariance matrix
+%         \item Target business volatility
+%         \item Penalization parameter $\lambda$ for factor variance term
+%         \item Cost matrices $\bC$ and $\bA$
+%     \end{itemize}  
+%     \item Let $\tilde\sigma_i^2:=\sigma_{\bepsilon,i}^2+\tau_i^2$
+%     \begin{align} 
+%     x_i^{(1)} := & \left(\frac{-c_i + \sqrt{c_i^2 + 4\nu\tilde\sigma_i^2 s_i}}{2\nu\tilde\sigma_i^2}\right)^2\\
+%     x_i^{(2)} := &\min\{\max\{x_i^{(1)}, v^m_i/\sigma_i\},v_i^M/\sigma_i \}\\
+%     \bu :=& 2(\bA_d+\lambda \bB\transpose\bOmega_\bff\bB) \bx^{(2)} +\frac{3}{2}(\bx^{(2)})^{-1/4} \circ\bA (\bx^{(1)})^{3/4}\\
+%     x_i^{(3)} := &\left(\frac{-c_i + \sqrt{c_i^2 + 4\nu\tilde\sigma_i^2 (s_i-u_i)}}{2\nu \tilde\sigma_i^2}\right)^2\\
+%     x_i^{(4)} :=& \min\{\max\{x_i^{(3)}, v^m_i/\sigma_i\},v_i^M/\sigma_i \}
+% \end{align}
+% \end{enumerate}
+%\section{The Cross-Terms of Market Impact}
+%Consider the following temporary transaction cost function $TC_{i,t}(x_i)=-c_{i,t} q_i^2$, where $t$ denotes a time slot during which asset $i$ is traded in quantity $q_i$, expressed as the NMV traded. This corresponds to a linear market impact $2c_{i,t} q_i$. Now consider the case of $n$ PMs, with PM $j$ executing trades $(q_{j,i,t})$, normalized by volatility as we did before. We make the assumption that a ``scaled PM'', i.e., whose \$vol is increased or decreased by a constant, will behave similarly to his unscaled version.   Define $q_j$ the pooled vector of $m\times T$ executed trading orders $(q_{j,1,1},\ldots, q_{j,m,1},\ldots, q_{j,m,T})$.
+%
+%Define the expectation of a vector as the average of its values. For example:
+%\begin{align}
+%    E(q_j)=\frac{1}{mT}\sum_{i,T}q_{j,i,t}
+%\end{align} 
+%With this notation, $E(x\circ y)=\cov(x, y)+E(x)E(y)$.
+% 
+%The empirical t-cost experienced by scaled PM $j$ is
+%\begin{align}
+%    -\sum_{i,t} c_{i,t} (q_{j,i,t}x_j)\sum_{k} (q_{k,i,t}x_k) =& -\sum_{i,k,t} c_{i,t} q_{j,i,t}  q_{k,i,t} x_j x_k\\
+%    & -\sum_k x_j x_k \left(\sum_{i,t} c_{i,t} q_{j,i,t}  q_{k,i,t} \right)\\ 
+%    & -\sum_k x_j x_k a_{j,k}\\ 
+%   a_{j,k} :=&  \sum_{i,t} c_{i,t} q_{j,i,t}  q_{k,i,t}
+%\end{align}
+%So all we have to do is to estimate the terms $a_{j,k}$ from empirical data.
+%The terms $c_{j,k}$ admit an interpretation. 
+%\begin{align}
+%a_{j,k}=mT E(c\circ q_j\circ q_k)= &mT\cov( c, q_j \circ q_k)) + mT E(c )E(q_j \circ q_k)
+%\end{align}
+%\emph{If} the pooled unit costs $c$ are uncorrelated with the trades product $q_j\circ q_k$, then
+%\begin{align}
+%a_{j,k}= & mT E(c )E(q_j \circ q_k)\\
+%= & mT\bar c\left[ \rho_{j,k} \sigma_j\sigma_k  + \bar q_j \bar q_k\right]
+%\end{align}
+%So that in this case the total tcosts are
+%\begin{align}
+%     mT\bar c [ \bx\transpose [\diag{\bsigma} \bR \diag{\bsigma}] \bx  + (\bar \bA_d\transpose\bx)^2 ]
+%\end{align}
+\section{Simplifications and Approximations}
+We now retain only the firm's aggregate risk budget and nonnegative
+allocations. There are no PM allocation bounds or sector and region share
+limits. The execution-cost and skill-uncertainty terms remain as specified
+above. Eliminating GMV through $g_i=x_i/\rho_i$, define
+\begin{align}
+    c_i&:=\frac{\lambda_{\mathrm{tc}}a_i^{\mathrm{opt}}}
+                    {\rho_i^{3/2}},&
+    q_i&:=\lambda_{\mathrm{skill}}\tau_i^2,&
+    V&:=V_{\mathrm{tot}}>0.
+\end{align}
+Take $c_i,q_i\geq0$. The objective is therefore
+$f(\bx)=\sum_i(s_i x_i-c_i x_i^{3/2}-q_i x_i^2)$.
+
+Separate the return covariance into its diagonal and off-diagonal parts:
+\begin{align}
+    \bOmega_\br(\eta)&=\bOmega_d+\eta\bOmega_o,&
+    \bOmega_d&=\operatorname{diag}(\omega_1,\ldots,\omega_n),
+    \qquad \omega_i>0.
+\end{align}
+The matrix $\bOmega_o$ is symmetric with zero diagonal. The parameter
+$\eta$ connects the diagonal problem at $\eta=0$ to the full covariance
+at $\eta=1$. Since returns are normalized to unit volatility, normally
+$\omega_i=1$ and $\bOmega_d=\bI$. We assume
+\begin{align}
+    \norm{\bOmega_d^{-1/2}\bOmega_o\bOmega_d^{-1/2}}_2\ll1.
+\end{align}
+This condition controls the combined effect of the off-diagonal entries;
+small pairwise correlations alone need not imply a small matrix norm.
+For each $\eta$, the allocation problem is
+\begin{align}
+    \max_{\bx\geq0}\quad &
+       f(\bx)=\sum_i(s_i x_i-c_i x_i^{3/2}-q_i x_i^2)\\
+    \suchthat\quad &
+       \bx\transpose\bOmega_\br(\eta)\bx\leq V^2.
+       \label{eq:near_diagonal_problem}
+\end{align}
+Thus the approximation changes the covariance while retaining the
+$3/2$-power cost function.
+
+\subsection{Solve the Diagonal Problem}
+Let $\nu\geq0$ be the multiplier of the variance constraint. At $\eta=0$,
+the Lagrangian separates into one problem per PM:
+\begin{align}
+    \max_{x_i\geq0}\quad
+       s_i x_i-c_i x_i^{3/2}-(q_i+\nu\omega_i)x_i^2.
+\end{align}
+For $s_i>0$, its first-order condition is
+\begin{align}
+    s_i-\frac32 c_i\sqrt{x_i}
+       -2(q_i+\nu\omega_i)x_i=0.
+\end{align}
+Setting $z_i=\sqrt{x_i}$ gives a quadratic equation,
+$2(q_i+\nu\omega_i)z_i^2+\frac32c_i z_i-s_i=0$.
+Its positive root yields the allocation
+\begin{yellowboxedequation}
+    x_i(\nu)=
+       \left[
+       \frac{2s_i}{\frac32c_i+
+          \sqrt{\frac94c_i^2+8(q_i+\nu\omega_i)s_i}}
+       \right]^2,\qquad s_i>0.
+\end{yellowboxedequation}
+For $s_i\leq0$, set $x_i(\nu)=0$. The formula above also covers the case
+$q_i+\nu\omega_i=0$ when $c_i>0$. If both cost and skill penalties vanish
+for a PM with positive Sharpe, its unconstrained allocation is unbounded,
+so the firm risk budget must bind.
+
+If the unconstrained allocations $x_i(0)$ satisfy
+$\sum_i\omega_i x_i(0)^2\leq V^2$, take $\nu_0=0$. Otherwise, determine
+$\nu_0>0$ from the scalar equation
+\begin{align}
+    \sum_i\omega_i x_i(\nu_0)^2=V^2.
+\end{align}
+In either case, set $x_{0,i}:=x_i(\nu_0)$.
+The left-hand side decreases with $\nu$, so a bracketed scalar root search
+finds the unique positive multiplier. This solves the diagonal allocation
+problem exactly. In the zero-cost, zero-skill-penalty limit,
+$x_{0,i}=s_i/(2\nu_0\omega_i)$ for positive-Sharpe PMs.
+
+\subsection{Add the Off-Diagonal Correction}
+Assume the diagonal risk budget binds with $\nu_0>0$, and that a small
+covariance perturbation leaves the set of positive allocations unchanged.
+Let $\mathcal I=\{i:x_{0,i}>0\}$. In the following calculation, restrict
+vectors and matrices to $\mathcal I$; allocations outside this set remain
+zero. Expand the optimal allocation and multiplier as
+\begin{align}
+    \bx^\star(\eta)&=\bx_0+\eta\,\delta\bx+O(\eta^2),\\
+    \nu^\star(\eta)&=\nu_0+\eta\,\delta\nu+O(\eta^2).
+\end{align}
+The first-order condition for an active PM in the full problem is
+\begin{align}
+    s_i-\frac32c_i\sqrt{x_i}-2q_i x_i
+       -2\nu\bigl(\bOmega_\br(\eta)\bx\bigr)_i=0.
+\end{align}
+Define the positive diagonal curvature matrix $\bH$ and the vector $\bu$:
+\begin{align}
+    \bH&:=\operatorname{diag}_{i\in\mathcal I}
+       \left(\frac{3c_i}{4\sqrt{x_{0,i}}}
+                     +2q_i+2\nu_0\omega_i\right),&
+    \bu&:=\bOmega_d\bx_0.
+\end{align}
+Differentiating the first-order conditions and the binding risk constraint
+at $\eta=0$ gives
+\begin{align}
+    \bH\,\delta\bx+2\bu\,\delta\nu
+       &=-2\nu_0\bOmega_o\bx_0,\\
+    2\bu\transpose\delta\bx
+       +\bx_0\transpose\bOmega_o\bx_0&=0.
+\end{align}
+Solving these equations yields
+\begin{yellowboxedequation}
+    \delta\nu&=
+       \frac{\frac14\bx_0\transpose\bOmega_o\bx_0
+          -\nu_0\bu\transpose\bH^{-1}\bOmega_o\bx_0}
+            {\bu\transpose\bH^{-1}\bu},\\
+    \delta\bx&=-2\bH^{-1}
+       \left(\nu_0\bOmega_o\bx_0+\delta\nu\,\bu\right).
+\end{yellowboxedequation}
+The term $\bOmega_o\bx_0$ measures each PM's covariance overlap with the
+baseline allocation. At a fixed multiplier, positive overlap reduces its
+allocation. The adjustment $\delta\nu$ redistributes risk across the firm
+so that the budget remains satisfied to first order. Holding the multiplier
+fixed would generally violate that condition.
+
+At $\eta=1$, use $\widetilde{\bx}=\bx_0+\delta\bx$ as the first-order
+approximation. Reinsert zero allocations for PMs outside $\mathcal I$ and
+calculate risk using the full covariance. A common rescaling puts the
+approximation exactly on the binding risk budget:
+\begin{align}
+    \widehat{\bx}
+       =\frac{V\widetilde{\bx}}
+          {\sqrt{\widetilde{\bx}\transpose\bOmega_\br
+                                      \widetilde{\bx}}}.
+\end{align}
+Under the stated regularity conditions, the risk discrepancy and the
+rescaling are second order in the off-diagonal covariance. The approximation
+requires positive allocations to remain positive and the active set to stay
+unchanged. If a PM enters or leaves the portfolio, re-solve the full
+problem. If the diagonal budget is strictly slack, the unconstrained
+allocation remains optimal while it is feasible under the full covariance;
+no covariance correction is then needed.
+
+Finally, let $F(\eta)$ be the optimal objective value in
+\eqref{eq:near_diagonal_problem}. The envelope theorem gives
+\begin{align}
+    F(\eta)=F(0)-\eta\nu_0\bx_0\transpose\bOmega_o\bx_0+O(\eta^2).
+\end{align}
+Positive aggregate covariance overlap lowers the attainable objective;
+negative overlap provides a diversification benefit.
+
+\section{Computations}
+\label{sec:computations}
+The full allocation problem can be formulated exactly as a second-order
+cone program (SOCP), including the $3/2$-power execution costs. This gives
+us a way to compute the optimum with the full covariance and to check the
+diagonal approximation. We do not need to construct the cones by hand:
+CVXPY, introduced by Diamond and Boyd, translates the objective and
+constraints into a form accepted by a numerical solver.\footnote{Steven
+Diamond and Stephen Boyd, \emph{CVXPY: A Python-Embedded Modeling Language
+for Convex Optimization}, JMLR 17(83), 2016;
+\href{https://web.stanford.edu/~boyd/papers/cvxpy_paper.html}{paper}
+and \href{https://www.cvxpy.org/tutorial/dcp/index.html}{CVXPY documentation}.}
+
+\subsection{Second-Order Cone Representation}
+For a positive-semidefinite covariance, choose a square-root factor
+$L$ such that $L\transpose L=\bOmega_\br$. The total-risk constraint is
+then $\|L\bx\|_2\leq V_{\mathrm{tot}}$, a second-order cone constraint.
+An eigenvalue decomposition gives such a factor even when the covariance
+is singular.
+
+For the cost term, introduce $t_i,u_i\geq0$ and impose
+\begin{align}
+    u_i^2&\leq g_i,&
+    g_i^2&\leq u_i t_i,\qquad g_i\geq0.
+\end{align}
+These inequalities hold for some $u_i$ exactly when
+$t_i\geq g_i^{3/2}$: the first gives $u_i\leq\sqrt{g_i}$, and the
+second requires $t_i\geq g_i^2/u_i$ when $g_i>0$. Conversely, choose
+$u_i=\sqrt{g_i}$. The case $g_i=0$ permits $u_i=0$ and any $t_i\geq0$.
+Both inequalities are rotated second-order cone constraints, since
+\begin{align}
+    z^2\leq ab,\quad a,b\geq0
+    \quad\Longleftrightarrow\quad
+    \left\|\begin{pmatrix}2z\\a-b\end{pmatrix}\right\|_2\leq a+b.
+\end{align}
+The epigraph of the quadratic skill penalty is also representable by a
+rotated second-order cone. With these auxiliary variables, the objective
+is linear and all remaining allocation and share constraints are affine.
+Thus an SOCP suffices; the original power-law cost need not be approximated.
+
+\subsection{A CVXPY Formulation}
+The following function takes the gross Sharpe vector $\bs$, posterior
+standard deviations $\boldsymbol\tau$, annual volatility per dollar of
+GMV $\boldsymbol\rho$, cost coefficients $\ba^{\mathrm{opt}}$, normalized
+return covariance $\bOmega_\br$, risk budget, and the two penalty weights.
+It returns the problem and its dollar-volatility and GMV variables.
+The expressions \texttt{power}, \texttt{sum\_squares}, and \texttt{norm}
+directly encode the cost, skill variance, and portfolio volatility;
+CVXPY supplies the auxiliary variables and cone constraints.
+
+By default there are no individual PM bounds or sector and region limits,
+as in the preceding section. Optional \texttt{lower} and \texttt{upper}
+arguments impose PM bounds. Each optional group is a tuple consisting of
+a zero--one membership vector and its lower and upper shares of
+$\sum_i x_i$. Sector and region groups can be supplied together.
+Scalar vector inputs are broadcast to all PMs.
+
+All dollar quantities must use the same units. If GMV, dollar volatility,
+and annual cost are measured in millions, while the fitted monthly $a_i$
+was estimated using dollar GMV and dollar cost, supply
+\begin{align}
+    a_i^{\mathrm{opt}}=10^3\tilde a_i
+                       =12\cdot10^3 a_iT_i.
+\end{align}
+The factor $10^3$ follows from dividing dollar cost by $10^6$ while
+raising GMV's $10^6$ conversion to the power $3/2$.
+Use inverse millions for $\lambda_{\mathrm{skill}}$ in this convention.
+
+\IfFileExists{capital_allocation.py}{%
+    \lstinputlisting[style=capallocpython]{capital_allocation.py}%
+}{%
+    \lstinputlisting[style=capallocpython]{../capital_allocation.py}%
+}
+
+The function requires a positive-definite covariance with spectral
+condition number
+\begin{align}
+    \kappa_2(\bOmega_\br)
+       =\frac{\lambda_{\max}(\bOmega_\br)}
+              {\lambda_{\min}(\bOmega_\br)}\leq10^4.
+\end{align}
+It raises an error for a nonpositive eigenvalue or a condition number
+above $10^4$, before constructing the optimization problem. It does not
+clip eigenvalues or regularize a rejected covariance.
+The solve status must be checked before using the allocations; a status
+of \texttt{optimal\_inaccurate} also calls for checking the constraint
+residuals against the required numerical tolerance.
+
+To impose the alternative residual and factor budgets, replace the
+aggregate norm constraint by
+$\|L_\epsilon\bx\|_2\leq V_\epsilon$ and
+$\|L_f\bB\bx\|_2\leq V_f$, with
+$L_\epsilon\transpose L_\epsilon=\bOmega_\bepsilon$ and
+$L_f\transpose L_f=\bOmega_\bff$.
+In the capital-allocation implementation, \texttt{app/optimizer/opt\_setup.py}
+uses these two component caps when a separate factor model is supplied;
+it does not add the documented aggregate cap. Without that factor model,
+the same file applies the supplied full covariance under the
+idiosyncratic-risk-limit setting.
+%\footnote{Capital Allocation Model
+%documentation, \texttt{docs/optimizer.md}; formulation in
+%\texttt{app/optimizer/opt\_setup.py}, inputs in
+%\texttt{app/optimizer/opt\_run.py}, and turnover adjustment in
+%\texttt{app/market\_impact/market\_impact\_coefficients.py}.}
+
+\subsection{A Ten-PM Example}
+Draw ten posterior mean gross Sharpes and ten posterior variances,
+independently across PMs and between the two sets of inputs:
+\begin{align}
+    s_i&\sim U[0,1],&
+    \log(\tau_i^2)&\sim N(0.5,0.2^2),
+    \qquad i=1,\ldots,10.
+\end{align}
+Thus $\tau_i^2\sim\operatorname{LOGN}(0.5,0.2)$ uses $0.5$ and $0.2$
+as the mean and standard deviation of the logarithm, respectively.
+The function takes posterior standard deviations, so we pass the square
+root of each sampled variance. Set every cross-PM return correlation to
+$0.1$:
+\begin{align}
+    \bOmega_\br=0.9\bI_{10}
+                     +0.1\mathbf{1}\mathbf{1}\transpose.
+\end{align}
+Here $\mathbf{1}$ is the ten-dimensional vector of ones.
+The eigenvalues are $0.9$ with multiplicity nine and $1.9$ with
+multiplicity one, giving a condition number $1.9/0.9\simeq2.11$.
+
+Measure GMV, dollar volatility, and annual PnL in millions. Set the firm
+risk budget to $V_{\mathrm{tot}}=500$ and use $\rho_i=0.2$ for every PM.
+Annual turnover is $\theta=10$, defined as total notional traded during
+the year, counting both purchases and sales, divided by GMV.
+
+To calibrate the common execution-cost curve, assume a cost of
+$k_{\mathrm{ref}}=10$ basis points per dollar traded at reference GMV
+$g_{\mathrm{ref}}=1000$ (\$1 billion). This is an illustrative equity
+cost benchmark.\footnote{Israel, Moskowitz, Ross, and Serban,
+\emph{Putting an Academic Factor into Practice: The Case of Momentum}
+(2021), \href{https://spinup-000d1a-wp-offload-media.s3.amazonaws.com/faculty/wp-content/uploads/sites/3/2021/08/Putting-and-Academic-Factor-Into-Practice.pdf}{Table 4},
+report realized costs per dollar traded of 6.40 bp for U.S. large-cap
+equities and 18.27 bp for U.S. small-cap equities over 2009--2016.
+The 10 bp cost and \$1 billion reference GMV here are calibration
+assumptions for the example.}
+Let cost per dollar traded grow with the square root of GMV:
+\begin{align}
+    k(g)&=10^{-3}\sqrt{\frac{g}{1000}},&
+    C_i(g_i)&=\theta g_i k(g_i)=a^{\mathrm{opt}}g_i^{3/2},\\
+    a^{\mathrm{opt}}&=\frac{10\cdot10^{-3}}{\sqrt{1000}}
+                       \simeq3.1623\times10^{-4}.
+\end{align}
+Thus a \$1 billion GMV book trades \$10 billion annually and incurs
+\$10 million of annual execution cost, or 1\% of GMV. Turnover and the
+cost-per-trade assumption are already incorporated in $a^{\mathrm{opt}}$.
+The same function applies to every PM.
+
+Take $\lambda_{\mathrm{tc}}=1$ and set the dimensionless skill-risk
+aversion $\lambda_{\mathrm{skill}}V_{\mathrm{tot}}=0.25$, giving
+$\lambda_{\mathrm{skill}}=0.0005$ per million. There are no PM bounds or
+sector and region share constraints. The fixed random seed makes the
+example reproducible. After installing \texttt{cvxpy} and \texttt{numpy},
+run the following code with \texttt{capital\_allocation.py} in the same
+directory:
+
+\IfFileExists{capital_allocation_example.py}{%
+    \lstinputlisting[style=capallocpython]{capital_allocation_example.py}%
+}{%
+    \lstinputlisting[style=capallocpython]{../capital_allocation_example.py}%
+}
+
+\Needspace{17\baselineskip}
+The resulting allocations are shown below; $x_i$ and $g_i$ are in millions.
+\begin{center}
+\begin{tabular}{rrrrr}
+\toprule
+PM & $s_i$ & $\tau_i^2$ & $x_i^\star$ & $g_i^\star$ \\
+\midrule
+1 & 0.7740 & 1.9658 & 134.2661 & 671.3307 \\
+2 & 0.4389 & 1.9262 & 51.8780 & 259.3898 \\
+3 & 0.8586 & 1.6706 & 168.0268 & 840.1340 \\
+4 & 0.6974 & 2.0657 & 112.3087 & 561.5434 \\
+5 & 0.0942 & 1.8103 & 0.0000 & 0.0000 \\
+6 & 0.9756 & 1.3884 & 216.7658 & 1083.8292 \\
+7 & 0.7611 & 1.7749 & 137.6399 & 688.1994 \\
+8 & 0.7861 & 1.3610 & 161.9265 & 809.6325 \\
+9 & 0.1281 & 1.9654 & 0.0000 & 0.0000 \\
+10 & 0.4504 & 1.6323 & 58.9501 & 294.7507 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Portfolio volatility is $500.0000$ million, so the risk budget binds.
+Gross expected annual PnL is $819.3519$ million, projected execution cost
+is $44.6080$ million, and the skill-uncertainty charge is $127.0318$ million.
+The objective value is consequently $647.7120$ million.
+Total GMV is $5208.8098$ million, implying annual traded notional
+of $52088.0982$ million at $10\times$ turnover.
+PMs 5 and 9 receive zero allocation: their expected returns do not compensate
+for their incremental contribution to portfolio risk at the optimum.
+
+%\section{Accounting for Netting}
+%In the previous sections we have maximized the Sharpe Ratio of the joint strategies to which the firm allocates risk. The PnL received by the firm, however, is not linear in the gross PnL of the portfolio manager. PM team $i$ has a fixed cost $c_i$, and it receives a percentage payoff  $p_i\in (0,1)$ of the PnL of the team, when such PnL is positive. We express the PnL received by the firm as
+%\begin{align*}
+%	\text{PnL}_{\text{firm},i}= f_i( \text{PnL}_{i})=  \min\{0, \text{PnL}_{i} -c_i\} + (1-p_i)\max\{0,  \text{PnL}_{i} -c_i\}
+%\end{align*}
+%We can extend the formulation of the base problem, to show it convex.  
+%\begin{align}
+%    \max\, & \sum_i f_i(s_i x_i- \kappa   \omega_{\bs,i} x_i^2)  \\ 
+%       \suchthat\, & \bx\transpose\bOmega_\bepsilon\bx \le \sigma_{\bepsilon,0}^2
+%\end{align}
+%\begin{align}
+%    \max\, & \sum_i z_i f_i(s_i x_i- \kappa   \omega_{\bs,i} x_i^2)  \\ 
+%       \suchthat\, & \bx\transpose\bOmega_\bepsilon\bx \le \sigma_{\bepsilon,0}^2\\
+%      & z_i- s_i x_i+ \kappa   \omega_{\bs,i} x_i^2+c_i\le 0\\
+%      & z_i - (1-p_i)( s_ix_i- \kappa   \omega_{\bs,i} x_i^2-c_i) \le 0
+%\end{align}
+ 
+\end{document}
